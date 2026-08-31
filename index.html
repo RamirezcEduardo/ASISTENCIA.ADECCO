@@ -540,7 +540,27 @@ function resetKiosk(){
   document.getElementById("dni-input").value = "";
   clearDniError();
   document.getElementById("dni-input").focus();
+  detenerInactividad();
 }
+
+/* Si alguien busca su DNI y se aleja sin marcar nada, la tarjeta no
+   se queda pegada esperándolo: a los 2 minutos sin tocar nada vuelve
+   sola a la pantalla de inicio, lista para el siguiente colaborador. */
+const INACTIVIDAD_MS = 2 * 60 * 1000;
+let inactividadTimer = null;
+function reiniciarInactividad(){
+  clearTimeout(inactividadTimer);
+  inactividadTimer = setTimeout(()=>{
+    if(document.getElementById("camera-modal").classList.contains("show")) return; // no interrumpir una foto en curso
+    if(document.getElementById("employee-card").classList.contains("show")) resetKiosk();
+  }, INACTIVIDAD_MS);
+}
+function detenerInactividad(){
+  clearTimeout(inactividadTimer);
+  inactividadTimer = null;
+}
+document.getElementById("employee-card").addEventListener("click", reiniciarInactividad);
+document.getElementById("employee-card").addEventListener("touchstart", reiniciarInactividad, { passive: true });
 
 function renderEmployeeCard(data){
   empleadoActual = data;
@@ -582,6 +602,7 @@ function renderEmployeeCard(data){
   document.getElementById("keypad").hidden = true;
   document.getElementById("employee-card").classList.add("show");
   clearDniError();
+  reiniciarInactividad();
 }
 
 function showFeedback(ok, title, sub){
