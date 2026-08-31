@@ -384,8 +384,12 @@
     <canvas id="camera-canvas" hidden></canvas>
     <div class="camera-error" id="camera-error"></div>
     <div class="camera-actions" id="camera-actions-live">
-      <button class="btn btn-ghost" id="camera-skip-btn">Continuar sin foto</button>
+      <button class="btn btn-ghost" id="camera-cancel-btn">Cancelar</button>
       <button type="button" class="btn-shutter" id="camera-shutter-btn" title="Capturar"></button>
+    </div>
+    <div class="camera-actions" id="camera-actions-retry" hidden>
+      <button class="btn btn-ghost" id="camera-cancel-btn-2">Cancelar</button>
+      <button class="btn btn-primary" id="camera-retry-btn">Reintentar</button>
     </div>
     <div class="camera-actions" id="camera-actions-preview" hidden>
       <button class="btn btn-ghost" id="camera-retake-btn">Repetir</button>
@@ -614,6 +618,7 @@ const ERROR_MSGS = {
   FALTA_INICIO_ALMUERZO: "Debes marcar Inicio de Almuerzo antes.",
   YA_REGISTRADO: "Esa marcación ya fue registrada hoy.",
   TIPO_INVALIDO: "Tipo de marcación inválido.",
+  FOTO_REQUERIDA: "La foto es obligatoria para Ingreso y Salida.",
 };
 function humanError(err){
   const code = (err && err.message) ? err.message.replace(/^.*?:\s*/, "").trim() : "";
@@ -642,9 +647,11 @@ function capturarFrame(video){
   return new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.6));
 }
 
-/* Devuelve un Blob JPEG si el colaborador se tomó la foto, o null si
-   no hay cámara / la rechazó / prefirió continuar sin foto. Nunca
-   lanza: un problema de cámara jamás debe bloquear la marcación. */
+/* La foto es obligatoria para Ingreso/Salida — no hay forma de
+   completar la marcación sin ella. Devuelve un Blob JPEG, o null
+   únicamente si el colaborador cancela explícitamente (se aborta
+   esa marcación, no se registra nada). Si la cámara falla, se
+   ofrece Reintentar en vez de dejar avanzar sin foto. */
 function abrirCamara(tipo){
   return new Promise(resolve=>{
     const modal = document.getElementById("camera-modal");
@@ -652,61 +659,78 @@ function abrirCamara(tipo){
     const photo = document.getElementById("camera-photo");
     const errorEl = document.getElementById("camera-error");
     const liveActions = document.getElementById("camera-actions-live");
+    const retryActions = document.getElementById("camera-actions-retry");
     const previewActions = document.getElementById("camera-actions-preview");
     const shutterBtn = document.getElementById("camera-shutter-btn");
-    const skipBtn = document.getElementById("camera-skip-btn");
+    const cancelBtn = document.getElementById("camera-cancel-btn");
+    const cancelBtn2 = document.getElementById("camera-cancel-btn-2");
+    const retryBtn = document.getElementById("camera-retry-btn");
     const retakeBtn = document.getElementById("camera-retake-btn");
     const confirmBtn = document.getElementById("camera-confirm-btn");
     let capturedBlob = null;
     let finished = false;
 
     document.getElementById("camera-title").textContent = "Foto de " + TIPO_LABEL[tipo];
-    errorEl.classList.remove("show");
     video.hidden = false; photo.hidden = true;
-    liveActions.hidden = false; previewActions.hidden = true;
+    retryBtn.hidden = false;
+    mostrarPasoCamara("live");
     modal.classList.add("show");
+
+    function mostrarPasoCamara(paso){
+      liveActions.hidden = paso !== "live";
+      retryActions.hidden = paso !== "retry";
+      previewActions.hidden = paso !== "preview";
+      errorEl.classList.toggle("show", paso === "retry");
+    }
 
     function limpiarYCerrar(resultado){
       if(finished) return;
       finished = true;
       pararCamara();
-      shutterBtn.onclick = null; skipBtn.onclick = null; retakeBtn.onclick = null; confirmBtn.onclick = null;
+      shutterBtn.onclick = null; cancelBtn.onclick = null; cancelBtn2.onclick = null;
+      retryBtn.onclick = null; retakeBtn.onclick = null; confirmBtn.onclick = null;
       modal.classList.remove("show");
       resolve(resultado);
+    }
+
+    function intentarActivarCamara(){
+      if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+        errorEl.textContent = "Este dispositivo no tiene cámara disponible. Avisa a tu supervisor.";
+        mostrarPasoCamara("retry");
+        retryBtn.hidden = true;
+        return;
+      }
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
+        .then(stream=>{
+          if(finished){ stream.getTracks().forEach(t=>t.stop()); return; }
+          camaraStream = stream;
+          video.srcObject = stream;
+          mostrarPasoCamara("live");
+        })
+        .catch(()=>{
+          errorEl.textContent = "No se pudo activar la cámara. Revisa los permisos e inténtalo de nuevo.";
+          retryBtn.hidden = false;
+          mostrarPasoCamara("retry");
+        });
     }
 
     shutterBtn.onclick = async ()=>{
       capturedBlob = await capturarFrame(video);
       photo.src = URL.createObjectURL(capturedBlob);
       video.hidden = true; photo.hidden = false;
-      liveActions.hidden = true; previewActions.hidden = false;
+      mostrarPasoCamara("preview");
     };
     retakeBtn.onclick = ()=>{
       capturedBlob = null;
       video.hidden = false; photo.hidden = true;
-      liveActions.hidden = false; previewActions.hidden = true;
+      mostrarPasoCamara("live");
     };
     confirmBtn.onclick = ()=> limpiarYCerrar(capturedBlob);
-    skipBtn.onclick = ()=> limpiarYCerrar(null);
+    cancelBtn.onclick = ()=> limpiarYCerrar(null);
+    cancelBtn2.onclick = ()=> limpiarYCerrar(null);
+    retryBtn.onclick = intentarActivarCamara;
 
-    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-      errorEl.textContent = "Este dispositivo no tiene cámara disponible.";
-      errorEl.classList.add("show");
-      shutterBtn.disabled = true;
-      return;
-    }
-
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
-      .then(stream=>{
-        if(finished){ stream.getTracks().forEach(t=>t.stop()); return; }
-        camaraStream = stream;
-        video.srcObject = stream;
-      })
-      .catch(()=>{
-        errorEl.textContent = "No se pudo activar la cámara. Puedes continuar sin foto.";
-        errorEl.classList.add("show");
-        shutterBtn.disabled = true;
-      });
+    intentarActivarCamara();
   });
 }
 
@@ -764,6 +788,10 @@ document.getElementById("punch-grid").addEventListener("click", async (e)=>{
   let fotoBlob = null;
   if(FOTO_TIPOS.has(tipo)){
     fotoBlob = await abrirCamara(tipo);
+    if(!fotoBlob){
+      renderEmployeeCard(empleadoActual); // cancelado: no se registra nada, se restauran los botones
+      return;
+    }
   }
 
   showFeedback(true, "Registrando...", TIPO_LABEL[tipo]);
@@ -774,6 +802,11 @@ document.getElementById("punch-grid").addEventListener("click", async (e)=>{
     getGeolocation(),
     fotoBlob ? subirFoto(fotoBlob, dni, tipo) : Promise.resolve(null),
   ]);
+
+  if(fotoBlob && !fotoPath){
+    showFeedback(false, "No se pudo subir la foto", "Revisa la conexión e inténtalo de nuevo.");
+    return;
+  }
 
   const { data, error } = await sb.rpc("asis_marcar", {
     p_dni: dni,
