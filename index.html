@@ -462,6 +462,7 @@
         <select id="filtro-area"><option value="">Todas</option></select>
       </div>
       <button class="btn btn-primary btn-sm" id="filtrar-btn">Filtrar</button>
+      <button class="btn btn-ghost btn-sm" id="actualizar-btn" title="Recargar los datos">⟳ Actualizar</button>
     </div>
 
     <div class="stats-row" id="stats-row"></div>
@@ -926,6 +927,7 @@ function todayISO(){ return new Date().toISOString().slice(0,10); }
 
 async function cargarAreas(){
   const sel = document.getElementById("filtro-area");
+  const seleccionActual = sel.value;
   sel.querySelectorAll("option:not(:first-child)").forEach(o=>o.remove());
   const { data } = await sb.rpc("asis_areas", { p_token: currentSession.token });
   (data || []).forEach(area=>{
@@ -933,6 +935,7 @@ async function cargarAreas(){
     opt.value = area; opt.textContent = area;
     sel.appendChild(opt);
   });
+  sel.value = seleccionActual; // conserva el filtro elegido al refrescar (si el área sigue existiendo)
 }
 
 function agruparPorColaboradorDia(filas){
@@ -1037,6 +1040,15 @@ async function cargarReporte(){
 }
 
 document.getElementById("filtrar-btn").addEventListener("click", cargarReporte);
+
+document.getElementById("actualizar-btn").addEventListener("click", async ()=>{
+  const btn = document.getElementById("actualizar-btn");
+  btn.disabled = true;
+  btn.textContent = "⟳ Actualizando...";
+  await Promise.all([cargarAreas(), cargarReporte()]);
+  btn.disabled = false;
+  btn.textContent = "⟳ Actualizar";
+});
 
 document.getElementById("tabla-body").addEventListener("click", async (e)=>{
   const cell = e.target.closest(".cell-time");
