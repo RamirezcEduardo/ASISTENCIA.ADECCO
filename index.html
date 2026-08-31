@@ -290,6 +290,8 @@
   .cell-empty{color:var(--border-strong);}
   .badge-ok{color:var(--green);font-weight:700;}
   .badge-bad{color:var(--orange);font-weight:700;}
+  .badge-debe{color:var(--red-dark);font-weight:700;}
+  .badge-debe em{font-style:normal;font-weight:600;font-size:11.5px;color:var(--red-dark);opacity:.85;}
   .empty-state{padding:50px 20px;text-align:center;color:var(--muted);font-size:13.5px;}
 
   @media (max-width:640px){
@@ -950,7 +952,21 @@ function horasTrabajadas(marcas){
     ms -= (new Date(marcas.almuerzo_fin.registrado_en) - new Date(marcas.almuerzo_inicio.registrado_en));
   }
   if(ms <= 0) return null;
-  return (ms / 3600000).toFixed(1);
+  return ms / 3600000;
+}
+
+/* Los 3 turnos (mañana 7am-4pm, tarde 12pm-9pm, noche 9pm-6am) son
+   9 horas de punta a punta / 8 horas trabajadas descontando 1h de
+   almuerzo. Se deja como mapa por si algún turno cambia a futuro. */
+const HORAS_ESPERADAS_POR_TURNO = { "MAÑANA": 8, "TARDE": 8, "NOCHE": 8 };
+const HORAS_ESPERADAS_DEFAULT = 8;
+
+function estadoHoras(g){
+  const horas = horasTrabajadas(g.marcas);
+  const esperadas = HORAS_ESPERADAS_POR_TURNO[(g.turno || "").trim().toUpperCase()] ?? HORAS_ESPERADAS_DEFAULT;
+  if(horas === null) return { horas: null, esperadas, deficit: null, cumplio: false };
+  const deficit = Math.max(0, esperadas - horas);
+  return { horas, esperadas, deficit, cumplio: deficit < 0.05 };
 }
 
 function urlFoto(fotoPath){
@@ -965,13 +981,19 @@ function celdaHora(marca){
   return '<span class="cell-time" data-id="'+marca.id+'" data-tipo="'+marca.tipo+'" title="Clic para corregir · doble clic para eliminar">'+fmtHora(marca.registrado_en)+'</span>'+foto;
 }
 
+function celdaHoras(g){
+  const { horas, esperadas, deficit, cumplio } = estadoHoras(g);
+  if(horas === null) return '<span class="badge-bad">Incompleto</span>';
+  if(cumplio) return '<span class="badge-ok">'+horas.toFixed(1)+' h</span>';
+  return '<span class="badge-debe">'+horas.toFixed(1)+' h <em>· debe '+deficit.toFixed(1)+' h</em></span>';
+}
+
 function renderTabla(grupos){
   const tbody = document.getElementById("tabla-body");
   tbody.innerHTML = "";
   document.getElementById("tabla-empty").hidden = grupos.length > 0;
   grupos.forEach(g=>{
     const tr = document.createElement("tr");
-    const horas = horasTrabajadas(g.marcas);
     tr.innerHTML = `
       <td>${g.dni}</td>
       <td>${g.nombre}</td>
@@ -981,7 +1003,7 @@ function renderTabla(grupos){
       <td>${celdaHora(g.marcas.almuerzo_inicio)}</td>
       <td>${celdaHora(g.marcas.almuerzo_fin)}</td>
       <td>${celdaHora(g.marcas.salida)}</td>
-      <td>${horas ? '<span class="badge-ok">'+horas+' h</span>' : '<span class="badge-bad">Incompleto</span>'}</td>
+      <td>${celdaHoras(g)}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -991,11 +1013,13 @@ function renderStats(grupos){
   const total = grupos.length;
   const completos = grupos.filter(g=> g.marcas.ingreso && g.marcas.salida).length;
   const enCurso = total - completos;
+  const noCumplieron = grupos.filter(g=> estadoHoras(g).horas !== null && !estadoHoras(g).cumplio).length;
   const areas = new Set(grupos.map(g=>g.area).filter(Boolean)).size;
   document.getElementById("stats-row").innerHTML = `
     <div class="stat"><div class="n">${total}</div><div class="l">Colaboradores/día</div></div>
     <div class="stat"><div class="n">${completos}</div><div class="l">Jornadas completas</div></div>
     <div class="stat"><div class="n">${enCurso}</div><div class="l">Incompletas</div></div>
+    <div class="stat"><div class="n" style="color:${noCumplieron ? 'var(--orange)' : 'inherit'}">${noCumplieron}</div><div class="l">No cumplieron 8h</div></div>
     <div class="stat"><div class="n">${areas}</div><div class="l">Áreas</div></div>
   `;
 }
@@ -1049,14 +1073,20 @@ document.getElementById("tabla-body").addEventListener("contextmenu", async (e)=
 
 document.getElementById("export-btn").addEventListener("click", ()=>{
   const grupos = agruparPorColaboradorDia(ultimoReporte);
-  const rows = grupos.map(g=>({
-    DNI: g.dni, Colaborador: g.nombre, Área: g.area || "", Turno: g.turno || "", Fecha: g.fecha,
-    Ingreso: g.marcas.ingreso ? fmtHora(g.marcas.ingreso.registrado_en) : "",
-    "Inicio Almuerzo": g.marcas.almuerzo_inicio ? fmtHora(g.marcas.almuerzo_inicio.registrado_en) : "",
-    "Fin Almuerzo": g.marcas.almuerzo_fin ? fmtHora(g.marcas.almuerzo_fin.registrado_en) : "",
-    Salida: g.marcas.salida ? fmtHora(g.marcas.salida.registrado_en) : "",
-    Horas: horasTrabajadas(g.marcas) || "",
-  }));
+  const rows = grupos.map(g=>{
+    const { horas, esperadas, deficit, cumplio } = estadoHoras(g);
+    return {
+      DNI: g.dni, Colaborador: g.nombre, Área: g.area || "", Turno: g.turno || "", Fecha: g.fecha,
+      Ingreso: g.marcas.ingreso ? fmtHora(g.marcas.ingreso.registrado_en) : "",
+      "Inicio Almuerzo": g.marcas.almuerzo_inicio ? fmtHora(g.marcas.almuerzo_inicio.registrado_en) : "",
+      "Fin Almuerzo": g.marcas.almuerzo_fin ? fmtHora(g.marcas.almuerzo_fin.registrado_en) : "",
+      Salida: g.marcas.salida ? fmtHora(g.marcas.salida.registrado_en) : "",
+      "Horas esperadas": esperadas,
+      "Horas trabajadas": horas === null ? "" : horas.toFixed(1),
+      "Horas que debe": horas === null ? "" : (cumplio ? 0 : deficit.toFixed(1)),
+      Estado: horas === null ? "Incompleto" : (cumplio ? "Cumplió" : "No cumplió"),
+    };
+  });
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Asistencia");
