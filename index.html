@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>ADECCO · Control de Asistencia</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
@@ -69,42 +69,58 @@
     --shadow:0 1px 2px rgba(0,0,0,.3), 0 1px 3px rgba(0,0,0,.35);
   }
   *{box-sizing:border-box;}
-  body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;transition:background .15s ease,color .15s ease;}
+  html{height:100%;}
+  body{
+    margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;transition:background .15s ease,color .15s ease;
+    overscroll-behavior:none;-webkit-tap-highlight-color:transparent;
+  }
   ::selection{background:var(--red);color:#fff;}
-  button{font-family:inherit;}
+  button{font-family:inherit;touch-action:manipulation;}
   input{font-family:inherit;}
   [hidden]{display:none!important;}
 
-  .topbar-red{height:5px;background:var(--red);}
+  .topbar-red{height:5px;background:var(--red);flex-shrink:0;}
 
   .theme-toggle{
     display:flex;align-items:center;justify-content:center;
-    width:34px;height:34px;background:var(--panel);border:1px solid var(--border);
-    border-radius:8px;cursor:pointer;flex-shrink:0;font-size:16px;line-height:1;
+    width:38px;height:38px;background:var(--panel);border:1px solid var(--border);
+    border-radius:8px;cursor:pointer;flex-shrink:0;font-size:17px;line-height:1;touch-action:manipulation;
   }
   .theme-toggle:hover{background:var(--panel-alt);border-color:var(--border-strong);}
 
-  /* ---------- Kiosko ---------- */
-  #kiosk{min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:32px 16px 60px;}
-  .kiosk-head{width:100%;max-width:520px;display:flex;justify-content:space-between;align-items:center;margin-bottom:28px;}
+  /* ---------- Kiosko (pensado para tablet montada en la entrada) ---------- */
+  #kiosk{
+    height:100dvh;height:100vh;display:flex;flex-direction:column;overflow:hidden;
+    padding:env(safe-area-inset-top,0) env(safe-area-inset-right,0) env(safe-area-inset-bottom,0) env(safe-area-inset-left,0);
+  }
+  .kiosk-inner{
+    flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:clamp(12px,2.5vh,32px) clamp(14px,3vw,28px);gap:clamp(10px,2vh,20px);overflow:auto;
+  }
+  .kiosk-head{width:100%;max-width:640px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;}
   .kiosk-brand{display:flex;align-items:center;gap:12px;}
   .kiosk-brand-bar{width:4px;align-self:stretch;border-radius:2px;background:var(--red);min-height:34px;}
-  .kiosk-brand h1{font-size:17px;margin:0;font-weight:800;letter-spacing:-.01em;}
-  .kiosk-brand p{margin:2px 0 0;font-size:12.5px;color:var(--muted);}
-  .kiosk-clock{font-family:'IBM Plex Mono',monospace;font-size:15px;color:var(--text-soft);text-align:right;}
-  .kiosk-clock .date{font-size:11.5px;color:var(--muted);text-transform:capitalize;}
+  .kiosk-brand h1{font-size:clamp(16px,2.4vw,20px);margin:0;font-weight:800;letter-spacing:-.01em;}
+  .kiosk-brand p{margin:2px 0 0;font-size:clamp(12px,1.6vw,14px);color:var(--muted);}
+  .kiosk-clock{font-family:'IBM Plex Mono',monospace;font-size:clamp(14px,2vw,18px);color:var(--text-soft);text-align:right;}
+  .kiosk-clock .date{font-size:clamp(11px,1.5vw,13px);color:var(--muted);text-transform:capitalize;}
 
-  .card{width:100%;max-width:520px;background:var(--panel);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);padding:26px;}
+  .card{
+    width:100%;max-width:640px;background:var(--panel);border:1px solid var(--border);border-radius:20px;
+    box-shadow:var(--shadow);padding:clamp(18px,3.5vw,32px);flex-shrink:0;
+  }
 
   .dni-form{display:flex;gap:10px;}
   .dni-form input{
-    flex:1;font-size:22px;font-family:'IBM Plex Mono',monospace;letter-spacing:.04em;
-    padding:14px 16px;border-radius:12px;border:1.5px solid var(--border);background:var(--panel-alt);color:var(--text);
+    flex:1;font-size:clamp(24px,4.5vw,32px);font-family:'IBM Plex Mono',monospace;letter-spacing:.06em;
+    text-align:center;padding:clamp(14px,2.2vh,20px) 16px;border-radius:14px;border:1.5px solid var(--border);
+    background:var(--panel-alt);color:var(--text);min-width:0;
   }
   .dni-form input:focus{outline:none;border-color:var(--red);}
   .btn{
     border:none;border-radius:12px;cursor:pointer;font-weight:700;font-size:15px;
-    padding:14px 20px;transition:transform .08s ease, opacity .15s ease;
+    padding:14px 20px;transition:transform .08s ease, opacity .15s ease;touch-action:manipulation;user-select:none;
   }
   .btn:active{transform:scale(.97);}
   .btn:disabled{opacity:.5;cursor:not-allowed;}
@@ -115,40 +131,52 @@
 
   .kiosk-hint{margin:10px 2px 0;font-size:12.5px;color:var(--muted);text-align:center;}
 
-  .employee-card{display:none;margin-top:22px;}
+  /* Teclado numérico táctil — para tablets sin teclado físico */
+  .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;}
+  .keypad-key{
+    padding:0;height:clamp(46px,8vh,64px);border-radius:12px;border:1.5px solid var(--border);
+    background:var(--panel-alt);color:var(--text);font-size:clamp(18px,3vw,24px);font-weight:700;
+    cursor:pointer;touch-action:manipulation;user-select:none;transition:background .1s ease,transform .08s ease;
+  }
+  .keypad-key:active{transform:scale(.95);background:var(--border);}
+  .keypad-key.key-clear{color:var(--red-dark);font-size:clamp(15px,2.2vw,18px);}
+  .keypad-key.key-go{background:var(--red);color:#fff;border-color:var(--red);font-size:clamp(22px,3.5vw,28px);}
+  .keypad-key.key-go:active{background:var(--red-dark);}
+
+  .employee-card{display:none;width:100%;}
   .employee-card.show{display:block;}
-  .employee-name{font-size:20px;font-weight:800;margin:0 0 2px;}
-  .employee-meta{font-size:13px;color:var(--text-soft);margin:0;}
+  .employee-name{font-size:clamp(19px,3vw,24px);font-weight:800;margin:0 0 2px;}
+  .employee-meta{font-size:clamp(12.5px,1.8vw,14px);color:var(--text-soft);margin:0;}
   .employee-meta span{color:var(--muted);}
 
-  .timeline{display:flex;justify-content:space-between;gap:8px;margin:20px 0 22px;}
+  .timeline{display:flex;justify-content:space-between;gap:8px;margin:clamp(14px,2.5vh,22px) 0;}
   .timeline-step{flex:1;text-align:center;}
   .timeline-dot{
-    width:34px;height:34px;border-radius:50%;background:var(--panel-alt);border:2px solid var(--border);
-    display:flex;align-items:center;justify-content:center;margin:0 auto 6px;font-size:15px;color:var(--muted);
+    width:clamp(30px,4.5vw,40px);height:clamp(30px,4.5vw,40px);border-radius:50%;background:var(--panel-alt);border:2px solid var(--border);
+    display:flex;align-items:center;justify-content:center;margin:0 auto 6px;font-size:clamp(13px,2vw,16px);color:var(--muted);
   }
   .timeline-step.done .timeline-dot{background:var(--green-tint);border-color:var(--green);color:var(--green);}
   .timeline-step.next .timeline-dot{border-color:var(--red);color:var(--red);}
-  .timeline-label{font-size:10.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.02em;}
-  .timeline-time{font-size:10.5px;color:var(--green);font-family:'IBM Plex Mono',monospace;margin-top:1px;}
+  .timeline-label{font-size:clamp(9.5px,1.3vw,11.5px);color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.02em;}
+  .timeline-time{font-size:clamp(9.5px,1.3vw,11.5px);color:var(--green);font-family:'IBM Plex Mono',monospace;margin-top:1px;}
 
-  .punch-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .punch-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
   .punch-btn{
-    padding:18px 10px;border-radius:14px;border:1.5px solid var(--border);background:var(--panel-alt);
-    color:var(--text);font-weight:700;font-size:14px;cursor:pointer;display:flex;flex-direction:column;
-    align-items:center;gap:6px;transition:all .12s ease;
+    padding:clamp(16px,3vh,26px) 10px;border-radius:16px;border:1.5px solid var(--border);background:var(--panel-alt);
+    color:var(--text);font-weight:700;font-size:clamp(14px,2vw,17px);cursor:pointer;display:flex;flex-direction:column;
+    align-items:center;gap:8px;transition:all .12s ease;touch-action:manipulation;user-select:none;min-height:64px;
   }
-  .punch-btn .ico{font-size:22px;}
+  .punch-btn .ico{font-size:clamp(24px,4vw,32px);}
   .punch-btn:hover:not(:disabled){border-color:var(--border-strong);}
   .punch-btn:disabled{opacity:.4;cursor:not-allowed;}
   .punch-btn.suggest{border-color:var(--red);background:var(--red-tint);color:var(--red-dark);}
   .punch-btn.done{border-color:var(--green);background:var(--green-tint);color:var(--green);}
 
-  .feedback{display:none;text-align:center;padding:30px 10px;}
+  .feedback{display:none;text-align:center;padding:clamp(16px,4vh,40px) 10px;width:100%;}
   .feedback.show{display:block;}
-  .feedback .ico{font-size:52px;margin-bottom:10px;}
-  .feedback h2{margin:0 0 4px;font-size:19px;font-weight:800;}
-  .feedback p{margin:0;color:var(--text-soft);font-size:14px;}
+  .feedback .ico{font-size:clamp(44px,7vw,64px);margin-bottom:10px;}
+  .feedback h2{margin:0 0 4px;font-size:clamp(18px,2.8vw,23px);font-weight:800;}
+  .feedback p{margin:0;color:var(--text-soft);font-size:clamp(13px,1.8vw,16px);}
   .feedback.error .ico{color:var(--red);}
   .feedback.ok .ico{color:var(--green);}
 
@@ -158,9 +186,19 @@
   }
   .msg-error.show{display:block;}
 
-  .kiosk-footer{margin-top:22px;}
-  .link-admin{color:var(--muted);font-size:12.5px;background:none;border:none;cursor:pointer;text-decoration:underline;}
+  .kiosk-footer{flex-shrink:0;}
+  .link-admin{color:var(--muted);font-size:12.5px;background:none;border:none;cursor:pointer;text-decoration:underline;padding:8px;touch-action:manipulation;}
   .link-admin:hover{color:var(--text-soft);}
+
+  /* En pantallas bajas (tablet en horizontal) se aprieta el espaciado
+     y se ocultan detalles no esenciales para que todo entre sin scroll. */
+  @media (max-height:620px){
+    .kiosk-head{margin-bottom:2px;}
+    .card{padding:clamp(14px,2vh,20px) clamp(16px,3vw,28px);}
+    .timeline{margin:8px 0 12px;}
+    .keypad{margin-top:8px;gap:6px;}
+    .keypad-key{height:clamp(38px,7vh,52px);}
+  }
 
   /* ---------- Modal de cámara ---------- */
   #camera-modal{
@@ -169,25 +207,25 @@
   }
   #camera-modal.show{display:flex;}
   .camera-card{
-    width:100%;max-width:420px;background:var(--panel);border-radius:18px;padding:20px;
-    display:flex;flex-direction:column;align-items:center;gap:14px;
+    width:100%;max-width:min(90vw,460px);background:var(--panel);border-radius:20px;padding:clamp(16px,3vw,24px);
+    display:flex;flex-direction:column;align-items:center;gap:14px;max-height:94dvh;max-height:94vh;
   }
-  .camera-card h3{margin:0;font-size:16px;font-weight:800;text-align:center;}
-  .camera-card p.hint{margin:0;font-size:12.5px;color:var(--muted);text-align:center;}
+  .camera-card h3{margin:0;font-size:clamp(16px,2.4vw,19px);font-weight:800;text-align:center;}
+  .camera-card p.hint{margin:0;font-size:clamp(12px,1.6vw,13.5px);color:var(--muted);text-align:center;}
   .camera-viewport{
-    width:100%;aspect-ratio:3/4;max-height:60vh;background:#000;border-radius:14px;overflow:hidden;
+    width:100%;aspect-ratio:3/4;max-height:50vh;background:#000;border-radius:14px;overflow:hidden;
     position:relative;
   }
   .camera-viewport video, .camera-viewport img{
     width:100%;height:100%;object-fit:cover;display:block;transform:scaleX(-1);
   }
-  .camera-actions{display:flex;gap:10px;width:100%;}
-  .camera-actions .btn{flex:1;}
+  .camera-actions{display:flex;align-items:center;justify-content:center;gap:14px;width:100%;}
+  .camera-actions .btn{flex:1;min-height:52px;}
   .camera-error{font-size:13px;color:var(--red-dark);background:var(--red-tint);border-radius:10px;padding:12px;text-align:center;display:none;}
   .camera-error.show{display:block;}
   .btn-shutter{
-    width:64px;height:64px;border-radius:50%;border:4px solid var(--panel-alt);background:var(--red);
-    cursor:pointer;flex-shrink:0;box-shadow:0 0 0 2px var(--red);
+    width:clamp(60px,9vw,76px);height:clamp(60px,9vw,76px);border-radius:50%;border:4px solid var(--panel-alt);background:var(--red);
+    cursor:pointer;flex-shrink:0;box-shadow:0 0 0 2px var(--red);touch-action:manipulation;
   }
   .btn-shutter:active{transform:scale(.94);}
 
@@ -263,7 +301,8 @@
 <body>
 
 <div id="kiosk">
-  <div class="topbar-red" style="position:fixed;top:0;left:0;right:0;"></div>
+  <div class="topbar-red"></div>
+  <div class="kiosk-inner">
   <div class="kiosk-head">
     <div class="kiosk-brand">
       <div class="kiosk-brand-bar"></div>
@@ -283,9 +322,23 @@
 
   <div class="card">
     <form class="dni-form" id="dni-form">
-      <input type="text" id="dni-input" inputmode="numeric" autocomplete="off" placeholder="Número de DNI" maxlength="15" autofocus>
+      <input type="text" id="dni-input" inputmode="numeric" autocomplete="off" placeholder="DNI" maxlength="15" autofocus>
       <button type="submit" class="btn btn-primary" id="dni-submit">Buscar</button>
     </form>
+    <div class="keypad" id="keypad">
+      <button type="button" class="keypad-key" data-key="1">1</button>
+      <button type="button" class="keypad-key" data-key="2">2</button>
+      <button type="button" class="keypad-key" data-key="3">3</button>
+      <button type="button" class="keypad-key" data-key="4">4</button>
+      <button type="button" class="keypad-key" data-key="5">5</button>
+      <button type="button" class="keypad-key" data-key="6">6</button>
+      <button type="button" class="keypad-key" data-key="7">7</button>
+      <button type="button" class="keypad-key" data-key="8">8</button>
+      <button type="button" class="keypad-key" data-key="9">9</button>
+      <button type="button" class="keypad-key key-clear" id="keypad-clear">⌫</button>
+      <button type="button" class="keypad-key" data-key="0">0</button>
+      <button type="button" class="keypad-key key-go" id="keypad-go" title="Buscar">✓</button>
+    </div>
     <div class="msg-error" id="dni-error"></div>
 
     <div class="employee-card" id="employee-card">
@@ -317,6 +370,7 @@
   <div class="kiosk-footer">
     <button class="link-admin" id="open-admin-btn">Panel administrativo →</button>
   </div>
+  </div><!-- /kiosk-inner -->
 </div>
 
 <div id="camera-modal">
@@ -478,6 +532,7 @@ function resetKiosk(){
   document.getElementById("employee-card").classList.remove("show");
   document.getElementById("feedback").classList.remove("show","ok","error");
   document.getElementById("dni-form").hidden = false;
+  document.getElementById("keypad").hidden = false;
   document.getElementById("dni-input").value = "";
   clearDniError();
   document.getElementById("dni-input").focus();
@@ -520,6 +575,7 @@ function renderEmployeeCard(data){
   });
 
   document.getElementById("dni-form").hidden = true;
+  document.getElementById("keypad").hidden = true;
   document.getElementById("employee-card").classList.add("show");
   clearDniError();
 }
@@ -678,6 +734,26 @@ document.getElementById("dni-form").addEventListener("submit", async (e)=>{
   renderEmployeeCard(data);
 });
 
+/* Teclado numérico táctil (para tablets sin teclado físico en la entrada) */
+document.getElementById("keypad").addEventListener("click", (e)=>{
+  const key = e.target.closest(".keypad-key");
+  if(!key) return;
+  const input = document.getElementById("dni-input");
+  if(key.id === "keypad-go"){
+    document.getElementById("dni-form").requestSubmit();
+    return;
+  }
+  if(key.id === "keypad-clear"){
+    input.value = input.value.slice(0, -1);
+    input.focus();
+    return;
+  }
+  if(input.value.length < input.maxLength){
+    input.value += key.dataset.key;
+  }
+  input.focus();
+});
+
 document.getElementById("punch-grid").addEventListener("click", async (e)=>{
   const btn = e.target.closest(".punch-btn");
   if(!btn || btn.disabled || !empleadoActual) return;
@@ -719,11 +795,26 @@ const SESSION_KEY = "asis-session-token";
 let currentSession = null;
 const ROLE_LABELS = { admin:"Administrador", gerencia:"Gerencia", coordinador:"Coordinador", operador:"Operador", invitado:"Invitado", rrhh:"Gestión Humana", supervisor:"Supervisor" };
 
+/* Mantiene la pantalla encendida mientras la tablet queda montada en
+   la entrada esperando marcaciones (si el navegador lo soporta). */
+let wakeLock = null;
+async function pedirWakeLock(){
+  try{
+    if("wakeLock" in navigator){ wakeLock = await navigator.wakeLock.request("screen"); }
+  }catch(e){ /* no soportado / denegado: no bloquea el uso del kiosko */ }
+}
+document.addEventListener("visibilitychange", ()=>{
+  if(document.visibilityState === "visible" && document.getElementById("kiosk").style.display !== "none"){
+    pedirWakeLock();
+  }
+});
+
 function showKiosk(){
   document.getElementById("kiosk").style.display = "flex";
   document.getElementById("login-screen").classList.remove("show");
   document.getElementById("admin-root").classList.remove("show");
   resetKiosk();
+  pedirWakeLock();
 }
 function showLogin(){
   document.getElementById("kiosk").style.display = "none";
@@ -735,6 +826,7 @@ function showAdmin(){
   document.getElementById("kiosk").style.display = "none";
   document.getElementById("login-screen").classList.remove("show");
   document.getElementById("admin-root").classList.add("show");
+  if(wakeLock){ wakeLock.release().catch(()=>{}); wakeLock = null; }
 }
 
 document.getElementById("open-admin-btn").addEventListener("click", showLogin);
