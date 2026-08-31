@@ -162,6 +162,35 @@
   .link-admin{color:var(--muted);font-size:12.5px;background:none;border:none;cursor:pointer;text-decoration:underline;}
   .link-admin:hover{color:var(--text-soft);}
 
+  /* ---------- Modal de cámara ---------- */
+  #camera-modal{
+    display:none;position:fixed;inset:0;background:rgba(10,11,14,.72);
+    align-items:center;justify-content:center;padding:20px;z-index:50;
+  }
+  #camera-modal.show{display:flex;}
+  .camera-card{
+    width:100%;max-width:420px;background:var(--panel);border-radius:18px;padding:20px;
+    display:flex;flex-direction:column;align-items:center;gap:14px;
+  }
+  .camera-card h3{margin:0;font-size:16px;font-weight:800;text-align:center;}
+  .camera-card p.hint{margin:0;font-size:12.5px;color:var(--muted);text-align:center;}
+  .camera-viewport{
+    width:100%;aspect-ratio:3/4;max-height:60vh;background:#000;border-radius:14px;overflow:hidden;
+    position:relative;
+  }
+  .camera-viewport video, .camera-viewport img{
+    width:100%;height:100%;object-fit:cover;display:block;transform:scaleX(-1);
+  }
+  .camera-actions{display:flex;gap:10px;width:100%;}
+  .camera-actions .btn{flex:1;}
+  .camera-error{font-size:13px;color:var(--red-dark);background:var(--red-tint);border-radius:10px;padding:12px;text-align:center;display:none;}
+  .camera-error.show{display:block;}
+  .btn-shutter{
+    width:64px;height:64px;border-radius:50%;border:4px solid var(--panel-alt);background:var(--red);
+    cursor:pointer;flex-shrink:0;box-shadow:0 0 0 2px var(--red);
+  }
+  .btn-shutter:active{transform:scale(.94);}
+
   /* ---------- Login ---------- */
   #login-screen{
     min-height:100vh;display:none;align-items:center;justify-content:center;padding:20px;
@@ -287,6 +316,27 @@
 
   <div class="kiosk-footer">
     <button class="link-admin" id="open-admin-btn">Panel administrativo →</button>
+  </div>
+</div>
+
+<div id="camera-modal">
+  <div class="camera-card">
+    <h3 id="camera-title">Tómate una foto</h3>
+    <p class="hint" id="camera-hint">Mira a la cámara y presiona el botón para capturar.</p>
+    <div class="camera-viewport">
+      <video id="camera-video" autoplay playsinline muted></video>
+      <img id="camera-photo" hidden>
+    </div>
+    <canvas id="camera-canvas" hidden></canvas>
+    <div class="camera-error" id="camera-error"></div>
+    <div class="camera-actions" id="camera-actions-live">
+      <button class="btn btn-ghost" id="camera-skip-btn">Continuar sin foto</button>
+      <button type="button" class="btn-shutter" id="camera-shutter-btn" title="Capturar"></button>
+    </div>
+    <div class="camera-actions" id="camera-actions-preview" hidden>
+      <button class="btn btn-ghost" id="camera-retake-btn">Repetir</button>
+      <button class="btn btn-primary" id="camera-confirm-btn">Usar esta foto</button>
+    </div>
   </div>
 </div>
 
@@ -514,6 +564,107 @@ function humanError(err){
   return ERROR_MSGS[code] || "No se pudo completar la operación. Intenta de nuevo.";
 }
 
+/* ---- Cámara (foto propia al marcar Ingreso/Salida) ---- */
+const FOTO_TIPOS = new Set(["ingreso", "salida"]);
+const FOTO_BUCKET = "asis-fotos";
+let camaraStream = null;
+
+function pararCamara(){
+  if(camaraStream){ camaraStream.getTracks().forEach(t=>t.stop()); camaraStream = null; }
+}
+
+function capturarFrame(video){
+  const canvas = document.getElementById("camera-canvas");
+  const MAX_W = 480;
+  const scale = Math.min(1, MAX_W / video.videoWidth);
+  canvas.width = Math.round(video.videoWidth * scale);
+  canvas.height = Math.round(video.videoHeight * scale);
+  const ctx = canvas.getContext("2d");
+  ctx.translate(canvas.width, 0);
+  ctx.scale(-1, 1); // espejo, para que coincida con lo que el colaborador ve en la vista previa
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  return new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.6));
+}
+
+/* Devuelve un Blob JPEG si el colaborador se tomó la foto, o null si
+   no hay cámara / la rechazó / prefirió continuar sin foto. Nunca
+   lanza: un problema de cámara jamás debe bloquear la marcación. */
+function abrirCamara(tipo){
+  return new Promise(resolve=>{
+    const modal = document.getElementById("camera-modal");
+    const video = document.getElementById("camera-video");
+    const photo = document.getElementById("camera-photo");
+    const errorEl = document.getElementById("camera-error");
+    const liveActions = document.getElementById("camera-actions-live");
+    const previewActions = document.getElementById("camera-actions-preview");
+    const shutterBtn = document.getElementById("camera-shutter-btn");
+    const skipBtn = document.getElementById("camera-skip-btn");
+    const retakeBtn = document.getElementById("camera-retake-btn");
+    const confirmBtn = document.getElementById("camera-confirm-btn");
+    let capturedBlob = null;
+    let finished = false;
+
+    document.getElementById("camera-title").textContent = "Foto de " + TIPO_LABEL[tipo];
+    errorEl.classList.remove("show");
+    video.hidden = false; photo.hidden = true;
+    liveActions.hidden = false; previewActions.hidden = true;
+    modal.classList.add("show");
+
+    function limpiarYCerrar(resultado){
+      if(finished) return;
+      finished = true;
+      pararCamara();
+      shutterBtn.onclick = null; skipBtn.onclick = null; retakeBtn.onclick = null; confirmBtn.onclick = null;
+      modal.classList.remove("show");
+      resolve(resultado);
+    }
+
+    shutterBtn.onclick = async ()=>{
+      capturedBlob = await capturarFrame(video);
+      photo.src = URL.createObjectURL(capturedBlob);
+      video.hidden = true; photo.hidden = false;
+      liveActions.hidden = true; previewActions.hidden = false;
+    };
+    retakeBtn.onclick = ()=>{
+      capturedBlob = null;
+      video.hidden = false; photo.hidden = true;
+      liveActions.hidden = false; previewActions.hidden = true;
+    };
+    confirmBtn.onclick = ()=> limpiarYCerrar(capturedBlob);
+    skipBtn.onclick = ()=> limpiarYCerrar(null);
+
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      errorEl.textContent = "Este dispositivo no tiene cámara disponible.";
+      errorEl.classList.add("show");
+      shutterBtn.disabled = true;
+      return;
+    }
+
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
+      .then(stream=>{
+        if(finished){ stream.getTracks().forEach(t=>t.stop()); return; }
+        camaraStream = stream;
+        video.srcObject = stream;
+      })
+      .catch(()=>{
+        errorEl.textContent = "No se pudo activar la cámara. Puedes continuar sin foto.";
+        errorEl.classList.add("show");
+        shutterBtn.disabled = true;
+      });
+  });
+}
+
+async function subirFoto(blob, dni, tipo){
+  try{
+    const path = (new Date().toISOString().slice(0,10)) + "/" + dni + "-" + tipo + "-" + Date.now() + ".jpg";
+    const { error } = await sb.storage.from(FOTO_BUCKET).upload(path, blob, { contentType: "image/jpeg", upsert: false });
+    if(error) return null;
+    return path;
+  }catch(e){
+    return null;
+  }
+}
+
 document.getElementById("dni-form").addEventListener("submit", async (e)=>{
   e.preventDefault();
   clearDniError();
@@ -531,17 +682,30 @@ document.getElementById("punch-grid").addEventListener("click", async (e)=>{
   const btn = e.target.closest(".punch-btn");
   if(!btn || btn.disabled || !empleadoActual) return;
   const tipo = btn.dataset.tipo;
+  const dni = empleadoActual.dni;
   document.querySelectorAll(".punch-btn").forEach(b=>b.disabled = true);
+
+  let fotoBlob = null;
+  if(FOTO_TIPOS.has(tipo)){
+    fotoBlob = await abrirCamara(tipo);
+  }
+
   showFeedback(true, "Registrando...", TIPO_LABEL[tipo]);
   document.getElementById("feedback-ico").textContent = "⏳";
   clearTimeout(resetTimer);
-  const geo = await getGeolocation();
+
+  const [geo, fotoPath] = await Promise.all([
+    getGeolocation(),
+    fotoBlob ? subirFoto(fotoBlob, dni, tipo) : Promise.resolve(null),
+  ]);
+
   const { data, error } = await sb.rpc("asis_marcar", {
-    p_dni: empleadoActual.dni,
+    p_dni: dni,
     p_tipo: tipo,
     p_lat: geo.lat,
     p_lng: geo.lng,
     p_dispositivo: navigator.userAgent.slice(0, 180),
+    p_foto_path: fotoPath,
   });
   if(error || !data){
     showFeedback(false, "No se pudo registrar", humanError(error));
@@ -643,9 +807,16 @@ function horasTrabajadas(marcas){
   return (ms / 3600000).toFixed(1);
 }
 
+function urlFoto(fotoPath){
+  return SUPABASE_URL + "/storage/v1/object/public/" + FOTO_BUCKET + "/" + fotoPath;
+}
+
 function celdaHora(marca){
   if(!marca) return '<span class="cell-empty">—</span>';
-  return '<span class="cell-time" data-id="'+marca.id+'" data-tipo="'+marca.tipo+'" title="Clic para corregir · doble clic para eliminar">'+fmtHora(marca.registrado_en)+'</span>';
+  const foto = marca.foto_path
+    ? ' <a href="'+urlFoto(marca.foto_path)+'" target="_blank" rel="noopener" title="Ver foto">📷</a>'
+    : '';
+  return '<span class="cell-time" data-id="'+marca.id+'" data-tipo="'+marca.tipo+'" title="Clic para corregir · doble clic para eliminar">'+fmtHora(marca.registrado_en)+'</span>'+foto;
 }
 
 function renderTabla(grupos){
