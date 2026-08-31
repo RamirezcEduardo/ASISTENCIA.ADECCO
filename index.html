@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>ADECCO · Control de Asistencia</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="theme-color" content="#E31E24">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Asistencia">
+<script>
+(function(){
+  var saved = null;
+  try{ saved = localStorage.getItem("asis-theme"); }catch(e){}
+  var theme = saved || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  if(theme === "dark") document.documentElement.setAttribute("data-theme", "dark");
+})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F3F4F6;
+    --panel:#FFFFFF;
+    --panel-alt:#FAFAFB;
+    --border:#E5E7EB;
+    --text:#1A1D23;
+    --muted:#8B92A0;
+    --red:#E31E24;
+    --red-dark:#B9151A;
+    --red-tint:#FDECEC;
+    --green:#16A34A;
+    --green-tint:#E9F9EF;
+    --orange:#F59E0B;
+    --orange-tint:#FEF3E2;
+    --blue:#2563EB;
+    --blue-tint:#EAF1FE;
+    --purple:#7C3AED;
+    --purple-tint:#F3ECFE;
+    --text-soft:#4B5563;
+    --border-strong:#C7CBD1;
+    --login-gradient:linear-gradient(135deg,#EEF2FB 0%,#F6F3F8 50%,#FBEFF1 100%);
+    --shadow:0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06);
+  }
+  :root[data-theme="dark"]{
+    --bg:#111318;
+    --panel:#1B1E25;
+    --panel-alt:#20242C;
+    --border:#2C313B;
+    --text:#E8EAED;
+    --muted:#8B92A0;
+    --red:#FF5A5F;
+    --red-dark:#E31E24;
+    --red-tint:#3A1418;
+    --green:#22C55E;
+    --green-tint:#0F2A1A;
+    --orange:#F5A623;
+    --orange-tint:#3A2A0D;
+    --blue:#5B8DEF;
+    --blue-tint:#152238;
+    --purple:#A78BFA;
+    --purple-tint:#251C3D;
+    --text-soft:#C1C7D0;
+    --border-strong:#3A404C;
+    --login-gradient:linear-gradient(135deg,#181A22 0%,#1E1A22 50%,#241A1D 100%);
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 1px 3px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;transition:background .15s ease,color .15s ease;}
+  ::selection{background:var(--red);color:#fff;}
+  button{font-family:inherit;}
+  input{font-family:inherit;}
+  [hidden]{display:none!important;}
+
+  .topbar-red{height:5px;background:var(--red);}
+
+  .theme-toggle{
+    display:flex;align-items:center;justify-content:center;
+    width:34px;height:34px;background:var(--panel);border:1px solid var(--border);
+    border-radius:8px;cursor:pointer;flex-shrink:0;font-size:16px;line-height:1;
+  }
+  .theme-toggle:hover{background:var(--panel-alt);border-color:var(--border-strong);}
+
+  /* ---------- Kiosko ---------- */
+  #kiosk{min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:32px 16px 60px;}
+  .kiosk-head{width:100%;max-width:520px;display:flex;justify-content:space-between;align-items:center;margin-bottom:28px;}
+  .kiosk-brand{display:flex;align-items:center;gap:12px;}
+  .kiosk-brand-bar{width:4px;align-self:stretch;border-radius:2px;background:var(--red);min-height:34px;}
+  .kiosk-brand h1{font-size:17px;margin:0;font-weight:800;letter-spacing:-.01em;}
+  .kiosk-brand p{margin:2px 0 0;font-size:12.5px;color:var(--muted);}
+  .kiosk-clock{font-family:'IBM Plex Mono',monospace;font-size:15px;color:var(--text-soft);text-align:right;}
+  .kiosk-clock .date{font-size:11.5px;color:var(--muted);text-transform:capitalize;}
+
+  .card{width:100%;max-width:520px;background:var(--panel);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);padding:26px;}
+
+  .dni-form{display:flex;gap:10px;}
+  .dni-form input{
+    flex:1;font-size:22px;font-family:'IBM Plex Mono',monospace;letter-spacing:.04em;
+    padding:14px 16px;border-radius:12px;border:1.5px solid var(--border);background:var(--panel-alt);color:var(--text);
+  }
+  .dni-form input:focus{outline:none;border-color:var(--red);}
+  .btn{
+    border:none;border-radius:12px;cursor:pointer;font-weight:700;font-size:15px;
+    padding:14px 20px;transition:transform .08s ease, opacity .15s ease;
+  }
+  .btn:active{transform:scale(.97);}
+  .btn:disabled{opacity:.5;cursor:not-allowed;}
+  .btn-primary{background:var(--red);color:#fff;}
+  .btn-primary:hover:not(:disabled){background:var(--red-dark);}
+  .btn-ghost{background:var(--panel-alt);color:var(--text);border:1px solid var(--border);}
+  .btn-ghost:hover:not(:disabled){border-color:var(--border-strong);}
+
+  .kiosk-hint{margin:10px 2px 0;font-size:12.5px;color:var(--muted);text-align:center;}
+
+  .employee-card{display:none;margin-top:22px;}
+  .employee-card.show{display:block;}
+  .employee-name{font-size:20px;font-weight:800;margin:0 0 2px;}
+  .employee-meta{font-size:13px;color:var(--text-soft);margin:0;}
+  .employee-meta span{color:var(--muted);}
+
+  .timeline{display:flex;justify-content:space-between;gap:8px;margin:20px 0 22px;}
+  .timeline-step{flex:1;text-align:center;}
+  .timeline-dot{
+    width:34px;height:34px;border-radius:50%;background:var(--panel-alt);border:2px solid var(--border);
+    display:flex;align-items:center;justify-content:center;margin:0 auto 6px;font-size:15px;color:var(--muted);
+  }
+  .timeline-step.done .timeline-dot{background:var(--green-tint);border-color:var(--green);color:var(--green);}
+  .timeline-step.next .timeline-dot{border-color:var(--red);color:var(--red);}
+  .timeline-label{font-size:10.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.02em;}
+  .timeline-time{font-size:10.5px;color:var(--green);font-family:'IBM Plex Mono',monospace;margin-top:1px;}
+
+  .punch-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .punch-btn{
+    padding:18px 10px;border-radius:14px;border:1.5px solid var(--border);background:var(--panel-alt);
+    color:var(--text);font-weight:700;font-size:14px;cursor:pointer;display:flex;flex-direction:column;
+    align-items:center;gap:6px;transition:all .12s ease;
+  }
+  .punch-btn .ico{font-size:22px;}
+  .punch-btn:hover:not(:disabled){border-color:var(--border-strong);}
+  .punch-btn:disabled{opacity:.4;cursor:not-allowed;}
+  .punch-btn.suggest{border-color:var(--red);background:var(--red-tint);color:var(--red-dark);}
+  .punch-btn.done{border-color:var(--green);background:var(--green-tint);color:var(--green);}
+
+  .feedback{display:none;text-align:center;padding:30px 10px;}
+  .feedback.show{display:block;}
+  .feedback .ico{font-size:52px;margin-bottom:10px;}
+  .feedback h2{margin:0 0 4px;font-size:19px;font-weight:800;}
+  .feedback p{margin:0;color:var(--text-soft);font-size:14px;}
+  .feedback.error .ico{color:var(--red);}
+  .feedback.ok .ico{color:var(--green);}
+
+  .msg-error{
+    margin-top:14px;padding:10px 14px;border-radius:10px;background:var(--red-tint);color:var(--red-dark);
+    font-size:13px;font-weight:600;display:none;
+  }
+  .msg-error.show{display:block;}
+
+  .kiosk-footer{margin-top:22px;}
+  .link-admin{color:var(--muted);font-size:12.5px;background:none;border:none;cursor:pointer;text-decoration:underline;}
+  .link-admin:hover{color:var(--text-soft);}
+
+  /* ---------- Login ---------- */
+  #login-screen{
+    min-height:100vh;display:none;align-items:center;justify-content:center;padding:20px;
+    background:var(--login-gradient);
+  }
+  #login-screen.show{display:flex;}
+  .login-card{width:100%;max-width:380px;background:var(--panel);border:1px solid var(--border);border-radius:18px;box-shadow:0 8px 30px rgba(16,24,40,.08);padding:32px;}
+  .login-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;}
+  .login-card h2{margin:0 0 4px;font-size:19px;font-weight:800;}
+  .login-card p.sub{margin:0 0 20px;color:var(--muted);font-size:13px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12.5px;font-weight:600;color:var(--text-soft);margin-bottom:6px;}
+  .field input{
+    width:100%;padding:11px 13px;border-radius:10px;border:1.5px solid var(--border);
+    background:var(--panel-alt);color:var(--text);font-size:14.5px;
+  }
+  .field input:focus{outline:none;border-color:var(--red);}
+  .login-back{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;margin-bottom:14px;padding:0;}
+  .login-back:hover{color:var(--text-soft);}
+
+  /* ---------- Admin ---------- */
+  #admin-root{display:none;min-height:100vh;flex-direction:column;}
+  #admin-root.show{display:flex;}
+  header.top{background:var(--panel);border-bottom:1px solid var(--border);padding:16px 24px;}
+  .header-row{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;}
+  .header-left{display:flex;gap:12px;align-items:center;}
+  .header-bar{width:4px;border-radius:2px;background:var(--red);align-self:stretch;}
+  .header-left h1{margin:0;font-size:16px;font-weight:800;}
+  .header-left p{margin:1px 0 0;font-size:12px;color:var(--muted);}
+  .header-right{display:flex;gap:10px;align-items:center;}
+  .account-badge{text-align:right;margin-right:4px;}
+  .account-badge .nm{font-size:13px;font-weight:700;}
+  .account-badge .rl{font-size:11px;color:var(--muted);}
+  .btn-sm{padding:8px 14px;font-size:13px;border-radius:9px;}
+
+  main.admin-main{flex:1;padding:20px 24px 40px;max-width:1200px;width:100%;margin:0 auto;}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:18px;}
+  .toolbar .field{margin-bottom:0;min-width:150px;}
+  .toolbar select{
+    width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);
+    background:var(--panel-alt);color:var(--text);font-size:13.5px;
+  }
+  .stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:18px;}
+  .stat{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px 16px;}
+  .stat .n{font-size:22px;font-weight:800;}
+  .stat .l{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.02em;}
+
+  .table-wrap{background:var(--panel);border:1px solid var(--border);border-radius:14px;overflow:auto;}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px;}
+  thead th{
+    text-align:left;padding:11px 14px;background:var(--panel-alt);color:var(--muted);
+    font-size:11px;text-transform:uppercase;letter-spacing:.03em;border-bottom:1px solid var(--border);white-space:nowrap;
+  }
+  tbody td{padding:10px 14px;border-bottom:1px solid var(--border);white-space:nowrap;}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:hover{background:var(--panel-alt);}
+  .cell-time{font-family:'IBM Plex Mono',monospace;cursor:pointer;border-radius:6px;padding:3px 6px;}
+  .cell-time:hover{background:var(--red-tint);color:var(--red-dark);}
+  .cell-empty{color:var(--border-strong);}
+  .badge-ok{color:var(--green);font-weight:700;}
+  .badge-bad{color:var(--orange);font-weight:700;}
+  .empty-state{padding:50px 20px;text-align:center;color:var(--muted);font-size:13.5px;}
+
+  @media (max-width:640px){
+    .kiosk-head{flex-direction:column;align-items:flex-start;gap:8px;}
+    .kiosk-clock{text-align:left;}
+  }
+</style>
+</head>
+<body>
+
+<div id="kiosk">
+  <div class="topbar-red" style="position:fixed;top:0;left:0;right:0;"></div>
+  <div class="kiosk-head">
+    <div class="kiosk-brand">
+      <div class="kiosk-brand-bar"></div>
+      <div>
+        <h1>ADECCO · Control de Asistencia</h1>
+        <p>Ingresa tu DNI para marcar</p>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="kiosk-clock">
+        <div id="kiosk-hora">--:--:--</div>
+        <div class="date" id="kiosk-fecha">-</div>
+      </div>
+      <button class="theme-toggle" id="theme-toggle-kiosk" title="Cambiar tema">🌙</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <form class="dni-form" id="dni-form">
+      <input type="text" id="dni-input" inputmode="numeric" autocomplete="off" placeholder="Número de DNI" maxlength="15" autofocus>
+      <button type="submit" class="btn btn-primary" id="dni-submit">Buscar</button>
+    </form>
+    <div class="msg-error" id="dni-error"></div>
+
+    <div class="employee-card" id="employee-card">
+      <p class="employee-name" id="emp-nombre">—</p>
+      <p class="employee-meta"><span>Puesto:</span> <span id="emp-puesto">—</span> · <span>Área:</span> <span id="emp-area">—</span> · <span>Turno:</span> <span id="emp-turno">—</span></p>
+
+      <div class="timeline" id="timeline">
+        <div class="timeline-step" data-tipo="ingreso"><div class="timeline-dot">1</div><div class="timeline-label">Ingreso</div><div class="timeline-time"></div></div>
+        <div class="timeline-step" data-tipo="almuerzo_inicio"><div class="timeline-dot">2</div><div class="timeline-label">Ini. Almuerzo</div><div class="timeline-time"></div></div>
+        <div class="timeline-step" data-tipo="almuerzo_fin"><div class="timeline-dot">3</div><div class="timeline-label">Fin Almuerzo</div><div class="timeline-time"></div></div>
+        <div class="timeline-step" data-tipo="salida"><div class="timeline-dot">4</div><div class="timeline-label">Salida</div><div class="timeline-time"></div></div>
+      </div>
+
+      <div class="punch-grid" id="punch-grid">
+        <button class="punch-btn" data-tipo="ingreso"><span class="ico">🟢</span>Ingreso</button>
+        <button class="punch-btn" data-tipo="almuerzo_inicio"><span class="ico">🍽️</span>Inicio Almuerzo</button>
+        <button class="punch-btn" data-tipo="almuerzo_fin"><span class="ico">↩️</span>Fin Almuerzo</button>
+        <button class="punch-btn" data-tipo="salida"><span class="ico">🔴</span>Salida</button>
+      </div>
+    </div>
+
+    <div class="feedback" id="feedback">
+      <div class="ico" id="feedback-ico">✅</div>
+      <h2 id="feedback-title">Registrado</h2>
+      <p id="feedback-sub">—</p>
+    </div>
+  </div>
+
+  <div class="kiosk-footer">
+    <button class="link-admin" id="open-admin-btn">Panel administrativo →</button>
+  </div>
+</div>
+
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-top">
+      <div>
+        <h2>Panel administrativo</h2>
+        <p class="sub">Usa tu cuenta de Adecco KPI / SSOMA</p>
+      </div>
+      <button class="theme-toggle" id="theme-toggle-login" title="Cambiar tema">🌙</button>
+    </div>
+    <button class="login-back" id="login-back-btn">← Volver a marcar asistencia</button>
+    <form id="login-form">
+      <div class="field">
+        <label>Usuario</label>
+        <input type="text" id="login-username" autocomplete="username" required>
+      </div>
+      <div class="field">
+        <label>Contraseña</label>
+        <input type="password" id="login-password" autocomplete="current-password" required>
+      </div>
+      <div class="msg-error" id="login-error"></div>
+      <button type="submit" class="btn btn-primary" style="width:100%;margin-top:6px;" id="login-submit-btn">Iniciar Sesión</button>
+    </form>
+  </div>
+</div>
+
+<div id="admin-root">
+  <header class="top">
+    <div class="header-row">
+      <div class="header-left">
+        <div class="header-bar"></div>
+        <div>
+          <h1>Control de Asistencia</h1>
+          <p>Panel administrativo</p>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="account-badge">
+          <div class="nm" id="account-nombre">—</div>
+          <div class="rl" id="account-rol">—</div>
+        </div>
+        <button class="theme-toggle" id="theme-toggle-admin" title="Cambiar tema">🌙</button>
+        <button class="btn btn-ghost btn-sm" id="export-btn">Exportar Excel</button>
+        <button class="btn btn-ghost btn-sm" id="logout-btn">Salir</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="admin-main">
+    <div class="toolbar">
+      <div class="field">
+        <label>Desde</label>
+        <input type="date" id="filtro-desde">
+      </div>
+      <div class="field">
+        <label>Hasta</label>
+        <input type="date" id="filtro-hasta">
+      </div>
+      <div class="field">
+        <label>Área</label>
+        <select id="filtro-area"><option value="">Todas</option></select>
+      </div>
+      <button class="btn btn-primary btn-sm" id="filtrar-btn">Filtrar</button>
+    </div>
+
+    <div class="stats-row" id="stats-row"></div>
+
+    <div class="table-wrap">
+      <table id="tabla-asistencia">
+        <thead>
+          <tr>
+            <th>DNI</th><th>Colaborador</th><th>Área</th><th>Turno</th>
+            <th>Ingreso</th><th>Ini. Almuerzo</th><th>Fin Almuerzo</th><th>Salida</th><th>Horas</th>
+          </tr>
+        </thead>
+        <tbody id="tabla-body"></tbody>
+      </table>
+      <div class="empty-state" id="tabla-empty" hidden>Sin marcaciones en el rango seleccionado.</div>
+    </div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+const SUPABASE_URL = "https://zlukrktpjffiycarpduc.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_QFLNZihxZRqdvyc-GSRZPw_Q-rkA6No";
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* ---- Tema ---- */
+const THEME_KEY = "asis-theme";
+function applyTheme(theme){
+  if(theme === "dark") document.documentElement.setAttribute("data-theme", "dark");
+  else document.documentElement.removeAttribute("data-theme");
+  document.querySelectorAll(".theme-toggle").forEach(el=>{ el.textContent = theme === "dark" ? "☀️" : "🌙"; });
+}
+function toggleTheme(){
+  const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+  try{ localStorage.setItem(THEME_KEY, next); }catch(e){}
+  applyTheme(next);
+}
+applyTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light");
+document.getElementById("theme-toggle-kiosk").addEventListener("click", toggleTheme);
+document.getElementById("theme-toggle-login").addEventListener("click", toggleTheme);
+document.getElementById("theme-toggle-admin").addEventListener("click", toggleTheme);
+
+/* ---- Reloj del kiosko ---- */
+function tickClock(){
+  const now = new Date();
+  document.getElementById("kiosk-hora").textContent = now.toLocaleTimeString("es-PE", { hour12:false });
+  document.getElementById("kiosk-fecha").textContent = now.toLocaleDateString("es-PE", { weekday:"long", day:"numeric", month:"long" });
+}
+tickClock();
+setInterval(tickClock, 1000);
+
+/* ================= KIOSKO ================= */
+const TIPOS = ["ingreso","almuerzo_inicio","almuerzo_fin","salida"];
+const TIPO_LABEL = { ingreso:"Ingreso", almuerzo_inicio:"Inicio de Almuerzo", almuerzo_fin:"Fin de Almuerzo", salida:"Salida" };
+let empleadoActual = null;
+let resetTimer = null;
+
+function fmtHora(iso){
+  return new Date(iso).toLocaleTimeString("es-PE", { hour:"2-digit", minute:"2-digit", hour12:false });
+}
+
+function showDniError(msg){
+  const el = document.getElementById("dni-error");
+  el.textContent = msg;
+  el.classList.add("show");
+}
+function clearDniError(){
+  document.getElementById("dni-error").classList.remove("show");
+}
+
+function resetKiosk(){
+  empleadoActual = null;
+  document.getElementById("employee-card").classList.remove("show");
+  document.getElementById("feedback").classList.remove("show","ok","error");
+  document.getElementById("dni-form").hidden = false;
+  document.getElementById("dni-input").value = "";
+  clearDniError();
+  document.getElementById("dni-input").focus();
+}
+
+function renderEmployeeCard(data){
+  empleadoActual = data;
+  document.getElementById("emp-nombre").textContent = data.nombre;
+  document.getElementById("emp-puesto").textContent = data.puesto || "—";
+  document.getElementById("emp-area").textContent = data.area || "—";
+  document.getElementById("emp-turno").textContent = data.turno || "—";
+
+  const marcasPorTipo = {};
+  (data.marcas_hoy || []).forEach(m => { marcasPorTipo[m.tipo] = m.registrado_en; });
+
+  const REQUISITO = { ingreso: null, almuerzo_inicio: "ingreso", almuerzo_fin: "almuerzo_inicio", salida: "ingreso" };
+  let siguienteAsignado = false;
+  TIPOS.forEach(tipo => {
+    const step = document.querySelector('.timeline-step[data-tipo="'+tipo+'"]');
+    const btn = document.querySelector('.punch-btn[data-tipo="'+tipo+'"]');
+    step.classList.remove("done","next");
+    btn.classList.remove("done","suggest");
+    const timeEl = step.querySelector(".timeline-time");
+    const requisito = REQUISITO[tipo];
+    const requisitoCumplido = !requisito || marcasPorTipo[requisito];
+    if(marcasPorTipo[tipo]){
+      step.classList.add("done");
+      btn.classList.add("done");
+      btn.disabled = true;
+      timeEl.textContent = fmtHora(marcasPorTipo[tipo]);
+    } else {
+      timeEl.textContent = "";
+      btn.disabled = !requisitoCumplido;
+      if(!siguienteAsignado && requisitoCumplido){
+        step.classList.add("next");
+        btn.classList.add("suggest");
+        siguienteAsignado = true;
+      }
+    }
+  });
+
+  document.getElementById("dni-form").hidden = true;
+  document.getElementById("employee-card").classList.add("show");
+  clearDniError();
+}
+
+function showFeedback(ok, title, sub){
+  document.getElementById("employee-card").classList.remove("show");
+  const fb = document.getElementById("feedback");
+  fb.classList.add("show");
+  fb.classList.toggle("ok", ok);
+  fb.classList.toggle("error", !ok);
+  document.getElementById("feedback-ico").textContent = ok ? "✅" : "⚠️";
+  document.getElementById("feedback-title").textContent = title;
+  document.getElementById("feedback-sub").textContent = sub;
+  clearTimeout(resetTimer);
+  resetTimer = setTimeout(resetKiosk, ok ? 3500 : 3000);
+}
+
+function getGeolocation(){
+  return new Promise(resolve=>{
+    if(!navigator.geolocation){ resolve({ lat:null, lng:null }); return; }
+    let done = false;
+    const finish = (val)=>{ if(done) return; done = true; resolve(val); };
+    navigator.geolocation.getCurrentPosition(
+      pos => finish({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => finish({ lat:null, lng:null }),
+      { timeout: 1200 }
+    );
+    setTimeout(()=> finish({ lat:null, lng:null }), 1200);
+  });
+}
+
+const ERROR_MSGS = {
+  DNI_NO_ENCONTRADO: "No encontramos ese DNI en el roster de colaboradores.",
+  COLABORADOR_INACTIVO: "Este colaborador figura como inactivo.",
+  FALTA_INGRESO: "Debes marcar Ingreso antes.",
+  FALTA_INICIO_ALMUERZO: "Debes marcar Inicio de Almuerzo antes.",
+  YA_REGISTRADO: "Esa marcación ya fue registrada hoy.",
+  TIPO_INVALIDO: "Tipo de marcación inválido.",
+};
+function humanError(err){
+  const code = (err && err.message) ? err.message.replace(/^.*?:\s*/, "").trim() : "";
+  return ERROR_MSGS[code] || "No se pudo completar la operación. Intenta de nuevo.";
+}
+
+document.getElementById("dni-form").addEventListener("submit", async (e)=>{
+  e.preventDefault();
+  clearDniError();
+  const dni = document.getElementById("dni-input").value.trim();
+  if(!dni){ showDniError("Ingresa tu número de DNI."); return; }
+  const btn = document.getElementById("dni-submit");
+  btn.disabled = true; btn.textContent = "Buscando...";
+  const { data, error } = await sb.rpc("asis_buscar_dni", { p_dni: dni });
+  btn.disabled = false; btn.textContent = "Buscar";
+  if(error || !data){ showDniError(humanError(error)); return; }
+  renderEmployeeCard(data);
+});
+
+document.getElementById("punch-grid").addEventListener("click", async (e)=>{
+  const btn = e.target.closest(".punch-btn");
+  if(!btn || btn.disabled || !empleadoActual) return;
+  const tipo = btn.dataset.tipo;
+  document.querySelectorAll(".punch-btn").forEach(b=>b.disabled = true);
+  showFeedback(true, "Registrando...", TIPO_LABEL[tipo]);
+  document.getElementById("feedback-ico").textContent = "⏳";
+  clearTimeout(resetTimer);
+  const geo = await getGeolocation();
+  const { data, error } = await sb.rpc("asis_marcar", {
+    p_dni: empleadoActual.dni,
+    p_tipo: tipo,
+    p_lat: geo.lat,
+    p_lng: geo.lng,
+    p_dispositivo: navigator.userAgent.slice(0, 180),
+  });
+  if(error || !data){
+    showFeedback(false, "No se pudo registrar", humanError(error));
+    return;
+  }
+  showFeedback(true, TIPO_LABEL[tipo] + " registrado", data.nombre + " · " + fmtHora(data.registrado_en));
+});
+
+/* ================= LOGIN (panel admin) ================= */
+const SESSION_KEY = "asis-session-token";
+let currentSession = null;
+const ROLE_LABELS = { admin:"Administrador", gerencia:"Gerencia", coordinador:"Coordinador", operador:"Operador", invitado:"Invitado", rrhh:"Gestión Humana", supervisor:"Supervisor" };
+
+function showKiosk(){
+  document.getElementById("kiosk").style.display = "flex";
+  document.getElementById("login-screen").classList.remove("show");
+  document.getElementById("admin-root").classList.remove("show");
+  resetKiosk();
+}
+function showLogin(){
+  document.getElementById("kiosk").style.display = "none";
+  document.getElementById("admin-root").classList.remove("show");
+  document.getElementById("login-screen").classList.add("show");
+  document.getElementById("login-username").focus();
+}
+function showAdmin(){
+  document.getElementById("kiosk").style.display = "none";
+  document.getElementById("login-screen").classList.remove("show");
+  document.getElementById("admin-root").classList.add("show");
+}
+
+document.getElementById("open-admin-btn").addEventListener("click", showLogin);
+document.getElementById("login-back-btn").addEventListener("click", showKiosk);
+
+document.getElementById("login-form").addEventListener("submit", async (e)=>{
+  e.preventDefault();
+  const errorEl = document.getElementById("login-error");
+  const btn = document.getElementById("login-submit-btn");
+  errorEl.classList.remove("show");
+  const username = document.getElementById("login-username").value.trim();
+  const password = document.getElementById("login-password").value;
+  if(!username || !password){ errorEl.textContent = "Ingresa usuario y contraseña."; errorEl.classList.add("show"); return; }
+  btn.disabled = true; btn.textContent = "Ingresando...";
+  const { data, error } = await sb.rpc("b2c_login", { p_username: username, p_password: password });
+  btn.disabled = false; btn.textContent = "Iniciar Sesión";
+  if(error || !data){ errorEl.textContent = "Usuario o contraseña incorrectos."; errorEl.classList.add("show"); return; }
+  if(!(data.permisos || []).includes("view.asistencia")){
+    errorEl.textContent = "Tu cuenta no tiene acceso al panel de asistencia.";
+    errorEl.classList.add("show");
+    return;
+  }
+  currentSession = data;
+  try{ localStorage.setItem(SESSION_KEY, data.token); }catch(e){}
+  document.getElementById("login-form").reset();
+  await initAdmin();
+});
+
+document.getElementById("logout-btn").addEventListener("click", async ()=>{
+  let token = null;
+  try{ token = localStorage.getItem(SESSION_KEY); localStorage.removeItem(SESSION_KEY); }catch(e){}
+  currentSession = null;
+  showKiosk();
+  if(token){ sb.rpc("b2c_logout", { p_token: token }).catch(()=>{}); }
+});
+
+/* ================= ADMIN ================= */
+let ultimoReporte = [];
+
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+
+async function cargarAreas(){
+  const sel = document.getElementById("filtro-area");
+  sel.querySelectorAll("option:not(:first-child)").forEach(o=>o.remove());
+  const { data } = await sb.rpc("asis_areas", { p_token: currentSession.token });
+  (data || []).forEach(area=>{
+    const opt = document.createElement("option");
+    opt.value = area; opt.textContent = area;
+    sel.appendChild(opt);
+  });
+}
+
+function agruparPorColaboradorDia(filas){
+  const grupos = {};
+  filas.forEach(f=>{
+    const key = f.dni + "|" + f.fecha;
+    if(!grupos[key]) grupos[key] = { dni:f.dni, nombre:f.nombre, area:f.area, turno:f.turno, fecha:f.fecha, marcas:{} };
+    grupos[key].marcas[f.tipo] = f;
+  });
+  return Object.values(grupos).sort((a,b)=> (b.fecha+a.nombre).localeCompare(a.fecha+b.nombre));
+}
+
+function horasTrabajadas(marcas){
+  if(!marcas.ingreso || !marcas.salida) return null;
+  let ms = new Date(marcas.salida.registrado_en) - new Date(marcas.ingreso.registrado_en);
+  if(marcas.almuerzo_inicio && marcas.almuerzo_fin){
+    ms -= (new Date(marcas.almuerzo_fin.registrado_en) - new Date(marcas.almuerzo_inicio.registrado_en));
+  }
+  if(ms <= 0) return null;
+  return (ms / 3600000).toFixed(1);
+}
+
+function celdaHora(marca){
+  if(!marca) return '<span class="cell-empty">—</span>';
+  return '<span class="cell-time" data-id="'+marca.id+'" data-tipo="'+marca.tipo+'" title="Clic para corregir · doble clic para eliminar">'+fmtHora(marca.registrado_en)+'</span>';
+}
+
+function renderTabla(grupos){
+  const tbody = document.getElementById("tabla-body");
+  tbody.innerHTML = "";
+  document.getElementById("tabla-empty").hidden = grupos.length > 0;
+  grupos.forEach(g=>{
+    const tr = document.createElement("tr");
+    const horas = horasTrabajadas(g.marcas);
+    tr.innerHTML = `
+      <td>${g.dni}</td>
+      <td>${g.nombre}</td>
+      <td>${g.area || "—"}</td>
+      <td>${g.turno || "—"}</td>
+      <td>${celdaHora(g.marcas.ingreso)}</td>
+      <td>${celdaHora(g.marcas.almuerzo_inicio)}</td>
+      <td>${celdaHora(g.marcas.almuerzo_fin)}</td>
+      <td>${celdaHora(g.marcas.salida)}</td>
+      <td>${horas ? '<span class="badge-ok">'+horas+' h</span>' : '<span class="badge-bad">Incompleto</span>'}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderStats(grupos){
+  const total = grupos.length;
+  const completos = grupos.filter(g=> g.marcas.ingreso && g.marcas.salida).length;
+  const enCurso = total - completos;
+  const areas = new Set(grupos.map(g=>g.area).filter(Boolean)).size;
+  document.getElementById("stats-row").innerHTML = `
+    <div class="stat"><div class="n">${total}</div><div class="l">Colaboradores/día</div></div>
+    <div class="stat"><div class="n">${completos}</div><div class="l">Jornadas completas</div></div>
+    <div class="stat"><div class="n">${enCurso}</div><div class="l">Incompletas</div></div>
+    <div class="stat"><div class="n">${areas}</div><div class="l">Áreas</div></div>
+  `;
+}
+
+async function cargarReporte(){
+  const desde = document.getElementById("filtro-desde").value || todayISO();
+  const hasta = document.getElementById("filtro-hasta").value || todayISO();
+  const area = document.getElementById("filtro-area").value;
+  const { data, error } = await sb.rpc("asis_reporte", { p_token: currentSession.token, p_desde: desde, p_hasta: hasta, p_area: area || null });
+  if(error){ alert(humanError(error)); return; }
+  ultimoReporte = data || [];
+  const grupos = agruparPorColaboradorDia(ultimoReporte);
+  renderTabla(grupos);
+  renderStats(grupos);
+}
+
+document.getElementById("filtrar-btn").addEventListener("click", cargarReporte);
+
+document.getElementById("tabla-body").addEventListener("click", async (e)=>{
+  const cell = e.target.closest(".cell-time");
+  if(!cell) return;
+  const id = cell.dataset.id;
+  const tipo = cell.dataset.tipo;
+  const actual = ultimoReporte.find(f=>String(f.id) === String(id));
+  if(!actual) return;
+  const eliminar = confirm(TIPO_LABEL[tipo]+" de "+actual.nombre+" a las "+fmtHora(actual.registrado_en)+".\n\nAceptar = corregir hora · Cancelar = no hacer nada.\n(Para eliminar, usa el botón derecho / mantener presionado.)");
+  if(!eliminar) return;
+  const horaActual = new Date(actual.registrado_en);
+  const hhmm = prompt("Nueva hora (HH:MM, 24h):", horaActual.toTimeString().slice(0,5));
+  if(!hhmm || !/^\d{1,2}:\d{2}$/.test(hhmm)) return;
+  const [hh, mm] = hhmm.split(":").map(Number);
+  const nueva = new Date(actual.fecha + "T00:00:00");
+  nueva.setHours(hh, mm, 0, 0);
+  const { error } = await sb.rpc("asis_editar", { p_token: currentSession.token, p_id: Number(id), p_tipo: tipo, p_registrado_en: nueva.toISOString() });
+  if(error){ alert(humanError(error)); return; }
+  cargarReporte();
+});
+
+document.getElementById("tabla-body").addEventListener("contextmenu", async (e)=>{
+  const cell = e.target.closest(".cell-time");
+  if(!cell) return;
+  e.preventDefault();
+  const id = cell.dataset.id;
+  const actual = ultimoReporte.find(f=>String(f.id) === String(id));
+  if(!actual) return;
+  if(!confirm("¿Eliminar la marcación de "+TIPO_LABEL[actual.tipo]+" de "+actual.nombre+"?")) return;
+  const { error } = await sb.rpc("asis_eliminar", { p_token: currentSession.token, p_id: Number(id) });
+  if(error){ alert(humanError(error)); return; }
+  cargarReporte();
+});
+
+document.getElementById("export-btn").addEventListener("click", ()=>{
+  const grupos = agruparPorColaboradorDia(ultimoReporte);
+  const rows = grupos.map(g=>({
+    DNI: g.dni, Colaborador: g.nombre, Área: g.area || "", Turno: g.turno || "", Fecha: g.fecha,
+    Ingreso: g.marcas.ingreso ? fmtHora(g.marcas.ingreso.registrado_en) : "",
+    "Inicio Almuerzo": g.marcas.almuerzo_inicio ? fmtHora(g.marcas.almuerzo_inicio.registrado_en) : "",
+    "Fin Almuerzo": g.marcas.almuerzo_fin ? fmtHora(g.marcas.almuerzo_fin.registrado_en) : "",
+    Salida: g.marcas.salida ? fmtHora(g.marcas.salida.registrado_en) : "",
+    Horas: horasTrabajadas(g.marcas) || "",
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Asistencia");
+  XLSX.writeFile(wb, "asistencia_" + todayISO() + ".xlsx");
+});
+
+async function initAdmin(){
+  document.getElementById("account-nombre").textContent = currentSession.usuario.nombre;
+  const rol = currentSession.usuario.rol || "";
+  document.getElementById("account-rol").textContent = ROLE_LABELS[rol] || rol;
+  const hoy = todayISO();
+  document.getElementById("filtro-desde").value = hoy;
+  document.getElementById("filtro-hasta").value = hoy;
+  showAdmin();
+  await cargarAreas();
+  await cargarReporte();
+}
+
+/* ================= Arranque ================= */
+async function checkSession(){
+  let token = null;
+  try{ token = localStorage.getItem(SESSION_KEY); }catch(e){}
+  if(!token){ showKiosk(); return; }
+  const { data, error } = await sb.rpc("b2c_sesion_actual", { p_token: token });
+  if(error || !data || !(data.permisos || []).includes("view.asistencia")){
+    try{ localStorage.removeItem(SESSION_KEY); }catch(e){}
+    showKiosk();
+    return;
+  }
+  currentSession = data;
+  await initAdmin();
+}
+checkSession();
+</script>
+</body>
+</html>
