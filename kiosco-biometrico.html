@@ -156,7 +156,7 @@
     <span class="accion-tag" id="accion-tag"></span>
     <button class="scan-cancel" id="btn-scan-cancel" type="button">✕</button>
   </div>
-  <div class="scan-body">
+  <div class="scan-body" id="scan-body">
     <div id="cam-unit"><video id="video" autoplay muted playsinline></video><canvas id="overlay-canvas"></canvas></div>
     <div class="scan-hint" id="scan-hint">Mira a la cámara…</div>
     <div class="result-card" id="result-card" hidden>
@@ -267,6 +267,7 @@ function dentroDeVentana(turno){
 
 const video = document.getElementById("video");
 const camUnit = document.getElementById("cam-unit");
+const scanBody = document.getElementById("scan-body");
 const overlayCanvas = document.getElementById("overlay-canvas");
 const scanView = document.getElementById("scan-view");
 const scanHint = document.getElementById("scan-hint");
@@ -344,6 +345,7 @@ async function abrirScan(accion){
   accionTag.textContent = ACCION_INFO[accion].tag;
   resultCard.hidden = true;
   resultFeedbackEl.hidden = true;
+  scanBody.insertBefore(camUnit, scanBody.firstChild); // por si quedo movido dentro del modal de enrolamiento
   camUnit.hidden = false;
   setHint(modelosListos ? "Mira a la cámara para identificarte…" : "Cargando modelos…");
   scanView.classList.add("show");
