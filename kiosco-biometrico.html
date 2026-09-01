@@ -599,8 +599,13 @@ enrollCapturarBtn.addEventListener("click", async () => {
   }
   const promedio = muestras[0].map((_, i) => muestras.reduce((s, m) => s + m[i], 0) / muestras.length);
 
+  enrollStatus.className = "enroll-status";
+  enrollStatus.textContent = "Guardando foto de referencia…";
+  const fotoBlob = await capturarFrameJPEG();
+  const fotoPath = await subirFoto(fotoBlob, enrollEmpleado.dni, "biometrico");
+
   const { error } = await sb.rpc("asis_rostros_enrolar", {
-    p_dni: enrollEmpleado.dni, p_nombre: enrollEmpleado.nombre, p_embedding: promedio,
+    p_dni: enrollEmpleado.dni, p_nombre: enrollEmpleado.nombre, p_embedding: promedio, p_foto_path: fotoPath,
   });
   if(error){
     enrollStatus.className = "enroll-status bad";

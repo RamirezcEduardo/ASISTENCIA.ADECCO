@@ -139,6 +139,20 @@
   .sueldo-input{width:100px;background:var(--panel-alt);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:5px 8px;font-size:12.5px;font-family:var(--mono);}
   .missing{color:var(--amber);}
   .banner{background:var(--amber-dim);color:var(--amber);border-radius:10px;padding:10px 14px;font-size:12.5px;margin-bottom:14px;}
+
+  /* ============ Personal / enrolamiento biometrico ============ */
+  .personal-toolbar{display:flex;gap:10px;align-items:center;margin-bottom:14px;}
+  .personal-toolbar input{flex:1;max-width:280px;background:var(--panel-alt);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 12px;font-size:12.5px;}
+  .personal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;}
+  .persona-card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px;text-align:center;}
+  .persona-card.pendiente{border-color:rgba(245,166,35,.35);}
+  .persona-foto{width:76px;height:76px;border-radius:50%;object-fit:cover;margin:0 auto 10px;display:block;background:var(--panel-alt);border:2px solid var(--border);}
+  .persona-foto.placeholder{display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--muted);}
+  .persona-card .nombre{font-size:12.5px;font-weight:700;line-height:1.3;min-height:32px;}
+  .persona-card .meta{font-size:10.5px;color:var(--muted);margin:4px 0 8px;}
+  .estado-pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:700;}
+  .estado-pill.ok{background:var(--green-dim);color:var(--green);}
+  .estado-pill.pend{background:var(--amber-dim);color:var(--amber);}
 </style>
 </head>
 <body>
@@ -172,6 +186,7 @@
     <button data-tab="ausentismo">📉 Ausentismo</button>
     <button data-tab="rotacion">🔁 Rotación</button>
     <button data-tab="general">📊 Asistencia General</button>
+    <button data-tab="personal">🪪 Personal</button>
     <button data-tab="pagos">💰 Pagos</button>
   </nav>
 
@@ -188,6 +203,7 @@
     <section class="tab-panel" id="panel-ausentismo"></section>
     <section class="tab-panel" id="panel-rotacion"></section>
     <section class="tab-panel" id="panel-general"></section>
+    <section class="tab-panel" id="panel-personal"></section>
     <section class="tab-panel" id="panel-pagos"></section>
   </main>
 </div>
@@ -218,6 +234,8 @@ function bucketOf(code){
 }
 const TIPO_LABEL = { ingreso:'Ingreso', almuerzo_inicio:'Salida a almuerzo', almuerzo_fin:'Retorno de almuerzo', salida:'Salida' };
 const TURNO_INICIO = { "MAÑANA":"06:00", "TARDE":"12:00", "NOCHE":"20:00" };
+const FOTO_BUCKET = "asis-fotos";
+function urlFoto(fotoPath){ return SUPABASE_URL + "/storage/v1/object/public/" + FOTO_BUCKET + "/" + fotoPath; }
 
 function fmtHora(iso){ return new Date(iso).toLocaleTimeString("es-PE",{hour:"2-digit",minute:"2-digit",hour12:false}); }
 function fmtFecha(d){ return new Date(d+"T00:00:00").toLocaleDateString("es-PE",{day:"2-digit",month:"short"}); }
@@ -330,6 +348,7 @@ function renderTabActivo(){
   else if(tabActivo === "ausentismo") renderAusentismo();
   else if(tabActivo === "rotacion") renderRotacion();
   else if(tabActivo === "general") renderGeneral();
+  else if(tabActivo === "personal") renderPersonal();
   else if(tabActivo === "pagos") renderPagos();
 }
 
@@ -631,6 +650,66 @@ async function renderGeneral(){
     data:{ labels: Object.keys(porTipo).map(t=>TIPO_LABEL[t]||t), datasets:[{ data: Object.values(porTipo), backgroundColor:["#22C55E","#F5A623","#F5A623","#FF3B4E"], borderWidth:0 }] },
     options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom",labels:{color:"#AEB4C2",boxWidth:10,font:{size:11}}}} }
   });
+}
+
+/* ================= TAB: Personal (enrolamiento biometrico) ================= */
+let personalData = [];
+async function renderPersonal(){
+  const panel = document.getElementById("panel-personal");
+  panel.innerHTML = `<div class="loading">Cargando…</div>`;
+  try{ personalData = await rpc("asis_rostros_estado", {}); }
+  catch(e){ panel.innerHTML = `<div class="loading">Error: ${humanError(e)}</div>`; return; }
+
+  const enrolados = personalData.filter(p => p.enrolado).length;
+  const total = personalData.length;
+  const cobertura = total ? Math.round(enrolados/total*100) : 0;
+
+  panel.innerHTML = `
+    <div class="kpi-grid">
+      ${kpiTile("Colaboradores activos", total, "", "#3B82F6")}
+      ${kpiTile("Enrolados", enrolados, "con rostro registrado", "#22C55E")}
+      ${kpiTile("Pendientes", total-enrolados, "sin rostro registrado", "#F5A623")}
+      ${kpiTile("Cobertura biométrica", cobertura+"%", "", cobertura>=80?"#22C55E":"#F5A623")}
+    </div>
+    <div class="card">
+      <h3>Personal</h3>
+      <p class="hint">Foto tomada durante el enrolamiento en el kiosco — no es la usada para reconocer (esa es un vector numérico, no se puede ver).</p>
+      <div class="personal-toolbar">
+        <input type="text" id="personal-buscar" placeholder="Buscar por nombre, DNI o área…">
+        <label style="font-size:11.5px;color:var(--muted);"><input type="checkbox" id="personal-solo-pendientes" style="margin-right:5px;">Solo pendientes</label>
+      </div>
+      <div class="personal-grid" id="personal-grid"></div>
+    </div>
+  `;
+
+  const buscarInput = document.getElementById("personal-buscar");
+  const soloPendientes = document.getElementById("personal-solo-pendientes");
+  buscarInput.addEventListener("input", pintarPersonalGrid);
+  soloPendientes.addEventListener("change", pintarPersonalGrid);
+  pintarPersonalGrid();
+}
+function pintarPersonalGrid(){
+  const grid = document.getElementById("personal-grid");
+  if(!grid) return;
+  const q = (document.getElementById("personal-buscar").value || "").toLowerCase().trim();
+  const soloPend = document.getElementById("personal-solo-pendientes").checked;
+  const lista = personalData
+    .filter(p => !soloPend || !p.enrolado)
+    .filter(p => !q || [p.nombre, p.dni, p.area, p.puesto].some(v => (v||"").toLowerCase().includes(q)))
+    .sort((a,b) => (a.enrolado === b.enrolado ? a.nombre.localeCompare(b.nombre) : (a.enrolado ? 1 : -1)));
+
+  if(!lista.length){ grid.innerHTML = `<div class="feed-empty">Sin resultados.</div>`; return; }
+
+  grid.innerHTML = lista.map(p => `
+    <div class="persona-card ${p.enrolado ? '' : 'pendiente'}">
+      ${p.foto_path
+        ? `<img class="persona-foto" src="${urlFoto(p.foto_path)}" alt="${p.nombre}" loading="lazy">`
+        : `<div class="persona-foto placeholder">${p.enrolado ? '🧑' : '❔'}</div>`}
+      <div class="nombre">${p.nombre}</div>
+      <div class="meta">${p.dni} · ${[p.area, p.turno].filter(Boolean).join(" · ")}</div>
+      <span class="estado-pill ${p.enrolado ? 'ok' : 'pend'}">${p.enrolado ? '✅ Enrolado' : '⏳ Pendiente'}</span>
+    </div>
+  `).join("");
 }
 
 /* ================= TAB: Pagos ================= */
