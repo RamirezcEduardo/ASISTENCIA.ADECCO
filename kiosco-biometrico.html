@@ -194,7 +194,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="vendor/face-api.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <script>
 const SUPABASE_URL = "https://zlukrktpjffiycarpduc.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_QFLNZihxZRqdvyc-GSRZPw_Q-rkA6No";
@@ -212,7 +212,11 @@ function mostrarErrorGlobal(origen, err){
 window.addEventListener("error", (e) => mostrarErrorGlobal("error", e.error || e.message));
 window.addEventListener("unhandledrejection", (e) => mostrarErrorGlobal("promesa", e.reason));
 
-const MODEL_URL = "vendor/models";
+// Modelos servidos desde CDN (no empaquetados en el APK): Capacitor/Android
+// corrompe archivos binarios grandes leidos como asset local del WebView
+// (el shard de 4MB de face_recognition_model llegaba truncado). El kiosco
+// ya requiere internet para Supabase, asi que no es una dependencia nueva.
+const MODEL_URL = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights";
 const FOTO_BUCKET = "asis-fotos";
 const DISPOSITIVO = "kiosco-biometrico";
 

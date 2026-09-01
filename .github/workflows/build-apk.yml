@@ -6,7 +6,6 @@ on:
     paths:
       - "mobile/**"
       - "kiosco-biometrico.html"
-      - "vendor/**"
       - ".github/workflows/build-apk.yml"
   workflow_dispatch: {}
 
@@ -38,15 +37,15 @@ jobs:
         run: npm ci
 
       # El kiosco biometrico (raiz del repo) es la pantalla que se instala en la
-      # tablet -- se copia como index.html de la app movil, junto con face-api.js
-      # y sus modelos (vendor/), asi el APK siempre lleva la version mas reciente.
+      # tablet -- se copia como index.html de la app movil. face-api.js y sus
+      # modelos se cargan desde CDN en tiempo de ejecucion (no se empaquetan):
+      # Android/Capacitor corrompe los shards binarios grandes servidos como
+      # asset local del WebView, y el kiosco ya requiere internet para Supabase.
       - name: Sincronizar app web con Capacitor
         run: |
           cp ../kiosco-biometrico.html www/index.html
           cp ../manifest.json www/manifest.json
           cp -r ../icons www/icons
-          rm -rf www/vendor
-          cp -r ../vendor www/vendor
           npx cap sync android
 
       - name: Compilar APK (debug)
