@@ -64,6 +64,12 @@
     backdrop-filter:blur(4px);color:var(--muted);font-size:12px;font-weight:700;box-shadow:var(--shadow);}
   .enroll-fab .dot{width:6px;height:6px;border-radius:50%;background:var(--muted);}
 
+  #debug-banner{position:fixed;left:10px;right:10px;bottom:64px;z-index:50;background:#1a1d23;color:#fff;
+    font-family:'IBM Plex Mono',monospace;font-size:11.5px;line-height:1.5;padding:10px 12px;border-radius:10px;
+    box-shadow:var(--shadow);display:none;max-height:30vh;overflow:auto;}
+  #debug-banner.show{display:block;}
+  #debug-banner b{color:#ff8a8a;}
+
   /* ---------------- Pantalla de escaneo (a pantalla completa) ---------------- */
   #scan-view{position:fixed;inset:0;z-index:15;background:#0c0e12;display:none;flex-direction:column;}
   #scan-view.show{display:flex;}
@@ -142,6 +148,7 @@
   </main>
 
   <button class="enroll-fab" id="btn-enroll-open" type="button"><span class="dot"></span> Registro biométrico</button>
+  <div id="debug-banner"></div>
 </div>
 
 <div id="scan-view">
@@ -192,6 +199,18 @@
 const SUPABASE_URL = "https://zlukrktpjffiycarpduc.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_QFLNZihxZRqdvyc-GSRZPw_Q-rkA6No";
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* Captura errores que de otro modo solo saldrian en la consola del
+   navegador (inutil en una tablet real) -- los muestra en pantalla
+   para poder diagnosticar sin cable USB ni Chrome DevTools. */
+const debugBanner = document.getElementById("debug-banner");
+function mostrarErrorGlobal(origen, err){
+  const msg = (err && err.message) ? err.message : String(err);
+  debugBanner.innerHTML += `<div><b>[${origen}]</b> ${msg}</div>`;
+  debugBanner.classList.add("show");
+}
+window.addEventListener("error", (e) => mostrarErrorGlobal("error", e.error || e.message));
+window.addEventListener("unhandledrejection", (e) => mostrarErrorGlobal("promesa", e.reason));
 
 const MODEL_URL = "vendor/models";
 const FOTO_BUCKET = "asis-fotos";
@@ -328,12 +347,18 @@ async function abrirScan(accion){
   procesando = false;
 
   try{
+    if(!modelosListos){
+      setHint("Cargando modelos de reconocimiento…");
+      await cargarModelos();
+    }
+    setHint("Solicitando acceso a la cámara…");
     await iniciarCamara();
   }catch(err){
-    setHint("No se pudo acceder a la cámara: " + err.message);
+    console.error(err);
+    setHint("No se pudo iniciar: " + (err && err.message ? err.message : err));
     return;
   }
-  if(!modelosListos) await cargarModelos();
+  setHint("Mira a la cámara para identificarte…");
   scanning = true;
   loopReconocer();
 }
@@ -529,16 +554,23 @@ enrollBuscarBtn.addEventListener("click", async () => {
     return;
   }
   enrollEmpleado = data;
-  enrollInfo.textContent = `${data.nombre} — ${[data.puesto, data.area].filter(Boolean).join(" · ")}`;
-  if(!modelosListos) await cargarModelos();
+  const empleadoLabel = `${data.nombre} — ${[data.puesto, data.area].filter(Boolean).join(" · ")}`;
+  enrollInfo.textContent = empleadoLabel;
   try{
+    if(!modelosListos){
+      enrollInfo.textContent = empleadoLabel + " · Cargando modelos de reconocimiento…";
+      await cargarModelos();
+    }
+    enrollInfo.textContent = empleadoLabel + " · Solicitando acceso a la cámara…";
     await iniciarCamara();
     enrollCamSlot.hidden = false;
     enrollCamSlot.appendChild(camUnit);
     camUnit.hidden = false;
+    enrollInfo.textContent = empleadoLabel;
     enrollCapturarBtn.disabled = false;
   }catch(err){
-    enrollInfo.textContent = "No se pudo acceder a la cámara: " + err.message;
+    console.error(err);
+    enrollInfo.textContent = empleadoLabel + " · No se pudo iniciar la cámara: " + (err && err.message ? err.message : err);
   }
 });
 
