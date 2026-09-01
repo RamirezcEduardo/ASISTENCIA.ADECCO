@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>ADECCO · Kiosco de Asistencia (Reconocimiento Facial)</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="theme-color" content="#E31E24">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Asistencia">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F3F4F6; --panel:#FFFFFF; --panel-alt:#FAFAFB; --border:#E5E7EB;
+    --text:#1A1D23; --muted:#8B92A0; --text-soft:#4B5563;
+    --red:#E31E24; --red-dark:#B9151A; --red-tint:#FDECEC;
+    --green:#16A34A; --green-dark:#0E8A3E; --green-tint:#E9F9EF;
+    --amber:#F59E0B; --amber-dark:#C97A05; --amber-tint:#FEF3E2;
+    --shadow:0 2px 10px rgba(16,24,40,.08);
+    --shadow-btn:0 6px 16px rgba(16,24,40,.16);
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;overscroll-behavior:none;-webkit-tap-highlight-color:transparent;
+  }
+  button{font-family:inherit;touch-action:manipulation;cursor:pointer;}
+  [hidden]{display:none!important;}
+
+  #app{height:100dvh;height:100vh;display:flex;flex-direction:column;overflow:hidden;
+    padding:env(safe-area-inset-top,0) env(safe-area-inset-right,0) env(safe-area-inset-bottom,0) env(safe-area-inset-left,0);}
+
+  .topbar-red{height:6px;background:var(--red);flex-shrink:0;}
+  header{display:flex;align-items:center;gap:10px;padding:14px 22px;flex-shrink:0;background:var(--panel);border-bottom:1px solid var(--border);}
+  header img{width:38px;height:38px;flex-shrink:0;}
+  header .brand{display:flex;flex-direction:column;line-height:1.15;}
+  header .brand b{font-size:19px;letter-spacing:.02em;color:var(--red);}
+  header .brand span{font-size:12.5px;color:var(--muted);}
+  header .clock{margin-left:auto;font-size:15px;font-weight:600;color:var(--text-soft);font-variant-numeric:tabular-nums;}
+
+  /* ---------------- Pantalla de inicio: 3 botones gigantes ---------------- */
+  #home-view{flex:1;min-height:0;display:flex;flex-direction:column;padding:18px;gap:16px;}
+  .mega-btn{
+    flex:1;border:none;border-radius:24px;color:#fff;display:flex;flex-direction:row;
+    align-items:center;justify-content:center;gap:18px;box-shadow:var(--shadow-btn);
+    transition:transform .08s ease, filter .08s ease;
+  }
+  .mega-btn:active{transform:scale(.97);filter:brightness(.94);}
+  .mega-btn .ico{font-size:clamp(40px,7vw,64px);line-height:1;}
+  .mega-btn .label{display:flex;flex-direction:column;align-items:flex-start;}
+  .mega-btn .label b{font-size:clamp(24px,4.2vw,36px);letter-spacing:.02em;}
+  .mega-btn .label span{font-size:clamp(12px,2vw,15px);opacity:.9;font-weight:500;}
+  .mega-btn.ingreso{background:linear-gradient(135deg,#1cbf63,var(--green));}
+  .mega-btn.almuerzo{background:linear-gradient(135deg,#ffb238,var(--amber));}
+  .mega-btn.salida{background:linear-gradient(135deg,#ff4a50,var(--red));}
+
+  .enroll-fab{position:fixed;left:14px;bottom:14px;z-index:5;display:flex;align-items:center;gap:6px;
+    padding:9px 14px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,.9);
+    backdrop-filter:blur(4px);color:var(--muted);font-size:12px;font-weight:700;box-shadow:var(--shadow);}
+  .enroll-fab .dot{width:6px;height:6px;border-radius:50%;background:var(--muted);}
+
+  /* ---------------- Pantalla de escaneo (a pantalla completa) ---------------- */
+  #scan-view{position:fixed;inset:0;z-index:15;background:#0c0e12;display:none;flex-direction:column;}
+  #scan-view.show{display:flex;}
+  .scan-topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;flex-shrink:0;}
+  .scan-topbar .accion-tag{color:#fff;font-weight:800;font-size:15px;letter-spacing:.03em;display:flex;align-items:center;gap:8px;}
+  .scan-cancel{width:44px;height:44px;border-radius:50%;border:none;background:rgba(255,255,255,.12);color:#fff;font-size:20px;}
+  .scan-body{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:0 18px 24px;}
+
+  #cam-unit{position:relative;width:min(80vw,360px);aspect-ratio:3/4;border-radius:24px;overflow:hidden;box-shadow:0 0 0 4px rgba(255,255,255,.08);}
+  #cam-unit video, #cam-unit canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);}
+
+  .scan-hint{color:#fff;font-size:15.5px;font-weight:700;text-align:center;min-height:22px;}
+
+  .result-card{width:min(80vw,360px);background:var(--panel);border-radius:20px;padding:22px;box-shadow:var(--shadow);text-align:center;}
+  .result-card h2{margin:0 0 4px;font-size:21px;}
+  .result-card p{margin:0;font-size:13px;color:var(--muted);}
+  .result-card .turno-info{margin-top:8px;font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:999px;display:inline-block;background:var(--panel-alt);color:var(--text-soft);}
+  .result-card .turno-info.warn{background:var(--amber-tint);color:#8a5a06;}
+  .result-feedback{margin-top:14px;padding:12px 14px;border-radius:12px;font-size:15px;font-weight:700;}
+  .result-feedback.info{background:var(--panel-alt);color:var(--text-soft);}
+  .result-feedback.success{background:var(--green-tint);color:#0d6b34;}
+  .result-feedback.error{background:var(--red-tint);color:var(--red-dark);}
+
+  /* ---------------- Modal de registro biometrico ---------------- */
+  #enroll-modal{position:fixed;inset:0;z-index:20;background:rgba(15,17,23,.6);display:none;align-items:center;justify-content:center;padding:16px;}
+  #enroll-modal.show{display:flex;}
+  .enroll-card{width:min(92vw,400px);max-height:92vh;overflow:auto;background:var(--panel);border-radius:18px;padding:20px;box-shadow:var(--shadow);}
+  .enroll-card h3{margin:0 0 4px;font-size:17px;}
+  .enroll-card p.hint{margin:0 0 14px;font-size:12.5px;color:var(--muted);}
+  .enroll-card label{display:block;font-size:11.5px;color:var(--muted);margin:10px 0 4px;}
+  .enroll-card input{width:100%;padding:12px;border-radius:10px;border:1px solid var(--border);font-size:16px;background:var(--panel-alt);color:var(--text);}
+  .enroll-card input:focus{outline:none;border-color:var(--red);}
+  #enroll-cam-slot{width:100%;aspect-ratio:4/3;border-radius:14px;overflow:hidden;margin-top:12px;background:#0c0e12;}
+  .enroll-row{display:flex;gap:8px;margin-top:14px;}
+  .btn{padding:12px 14px;border-radius:10px;border:none;font-size:14px;font-weight:700;flex:1;}
+  .btn-primary{background:var(--red);color:#fff;}
+  .btn-primary:disabled{opacity:.45;}
+  .btn-ghost{background:var(--panel-alt);color:var(--text-soft);border:1px solid var(--border);}
+  .enroll-status{margin-top:12px;font-size:13.5px;font-weight:600;min-height:18px;}
+  .enroll-status.ok{color:var(--green);}
+  .enroll-status.bad{color:var(--red-dark);}
+  .enroll-info{font-size:13px;color:var(--text-soft);margin-top:6px;}
+
+  /* Fila horizontal solo en pantallas anchas Y en orientacion horizontal
+     (tablet/monitor apaisado); en un tablet parado en la entrada (portrait,
+     el caso mas comun de kiosko) se quedan apiladas para que cada boton
+     sea grande y facil de tocar. */
+  @media (min-width:760px) and (min-aspect-ratio: 1/1){
+    #home-view{flex-direction:row;}
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div class="topbar-red"></div>
+  <header>
+    <img src="icons/icon-512.png" alt="Adecco">
+    <div class="brand"><b>ADECCO</b><span>Kiosco de Asistencia · Reconocimiento facial</span></div>
+    <div class="clock" id="clock">--:--</div>
+  </header>
+
+  <main id="home-view">
+    <button class="mega-btn ingreso" id="btn-home-ingreso" type="button">
+      <span class="ico">🟢</span>
+      <span class="label"><b>INGRESO</b><span>Marcar llegada</span></span>
+    </button>
+    <button class="mega-btn almuerzo" id="btn-home-almuerzo" type="button">
+      <span class="ico">🍽️</span>
+      <span class="label"><b>ALMUERZO</b><span>Salida / retorno</span></span>
+    </button>
+    <button class="mega-btn salida" id="btn-home-salida" type="button">
+      <span class="ico">🔴</span>
+      <span class="label"><b>SALIDA</b><span>Marcar fin de turno</span></span>
+    </button>
+  </main>
+
+  <button class="enroll-fab" id="btn-enroll-open" type="button"><span class="dot"></span> Registro biométrico</button>
+</div>
+
+<div id="scan-view">
+  <div class="scan-topbar">
+    <span class="accion-tag" id="accion-tag"></span>
+    <button class="scan-cancel" id="btn-scan-cancel" type="button">✕</button>
+  </div>
+  <div class="scan-body">
+    <div id="cam-unit"><video id="video" autoplay muted playsinline></video><canvas id="overlay-canvas"></canvas></div>
+    <div class="scan-hint" id="scan-hint">Mira a la cámara…</div>
+    <div class="result-card" id="result-card" hidden>
+      <h2 id="result-nombre">—</h2>
+      <p id="result-meta">—</p>
+      <span class="turno-info" id="result-turno-info" hidden></span>
+      <div class="result-feedback" id="result-feedback" hidden></div>
+    </div>
+  </div>
+</div>
+
+<div id="enroll-modal">
+  <div class="enroll-card">
+    <h3>Registro biométrico</h3>
+    <p class="hint">Enrola el rostro de un colaborador nuevo para que el kiosco lo reconozca automáticamente.</p>
+
+    <label for="enroll-dni">DNI</label>
+    <input id="enroll-dni" inputmode="numeric" maxlength="15" placeholder="Ej. 12345678">
+    <div class="enroll-row">
+      <button class="btn btn-ghost" id="enroll-buscar">Buscar colaborador</button>
+    </div>
+    <p class="enroll-info" id="enroll-info"></p>
+
+    <div id="enroll-cam-slot" hidden></div>
+
+    <div class="enroll-row">
+      <button class="btn btn-primary" id="enroll-capturar" disabled>Capturar rostro (3 muestras)</button>
+    </div>
+    <div class="enroll-status" id="enroll-status"></div>
+
+    <div class="enroll-row">
+      <button class="btn btn-ghost" id="enroll-cerrar">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="vendor/face-api.min.js"></script>
+<script>
+const SUPABASE_URL = "https://zlukrktpjffiycarpduc.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_QFLNZihxZRqdvyc-GSRZPw_Q-rkA6No";
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const MODEL_URL = "vendor/models";
+const FOTO_BUCKET = "asis-fotos";
+const DISPOSITIVO = "kiosco-biometrico";
+
+const RECOGNIZE_THRESHOLD = 0.5;
+const RECOGNIZE_INTERVAL_MS = 350;
+const STABLE_FRAMES_NEEDED = 3;
+const ENROLL_SAMPLES = 3;
+const RESET_DESPUES_MS = 3500;
+
+const TURNO_VENTANAS = {
+  "MAÑANA": { desde: "06:00", hasta: "08:15", label: "6:00 a.m. – 8:15 a.m." },
+  "TARDE":  { desde: "12:00", hasta: "13:15", label: "12:00 p.m. – 1:15 p.m." },
+  "NOCHE":  { desde: "20:00", hasta: "22:15", label: "8:00 p.m. – 10:15 p.m." },
+};
+const ACCION_INFO = {
+  ingreso:  { label: "Ingreso",  tag: "🟢 INGRESO" },
+  almuerzo: { label: "Almuerzo", tag: "🍽️ ALMUERZO" },
+  salida:   { label: "Salida",   tag: "🔴 SALIDA" },
+};
+const TIPO_LABEL = { ingreso: "Ingreso", almuerzo_inicio: "Salida a almuerzo", almuerzo_fin: "Retorno de almuerzo", salida: "Salida" };
+const ERROR_MSGS = {
+  DNI_NO_ENCONTRADO: "No encontramos ese rostro en el roster de colaboradores.",
+  COLABORADOR_INACTIVO: "Este colaborador figura como inactivo.",
+  FALTA_INGRESO: "Debes marcar Ingreso antes.",
+  FALTA_INICIO_ALMUERZO: "Debes marcar Salida a almuerzo antes.",
+  YA_REGISTRADO: "Esa marcación ya fue registrada hoy.",
+  TIPO_INVALIDO: "Tipo de marcación inválido.",
+  FOTO_REQUERIDA: "La foto es obligatoria para Ingreso y Salida.",
+  EMBEDDING_INVALIDO: "No se pudo procesar el rostro capturado.",
+};
+function humanError(err){
+  const code = (err && err.message) ? err.message.replace(/^.*?:\s*/, "").trim() : "";
+  return ERROR_MSGS[code] || "No se pudo completar la operación. Intenta de nuevo.";
+}
+function fmtHora(iso){
+  return new Date(iso).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+function horaActualHHMM(){
+  const d = new Date();
+  return String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
+}
+function dentroDeVentana(turno){
+  const v = TURNO_VENTANAS[(turno || "").trim().toUpperCase()];
+  if(!v) return null;
+  const ahora = horaActualHHMM();
+  return { ...v, ok: ahora >= v.desde && ahora <= v.hasta };
+}
+
+const video = document.getElementById("video");
+const camUnit = document.getElementById("cam-unit");
+const overlayCanvas = document.getElementById("overlay-canvas");
+const scanView = document.getElementById("scan-view");
+const scanHint = document.getElementById("scan-hint");
+const accionTag = document.getElementById("accion-tag");
+const clockEl = document.getElementById("clock");
+const resultCard = document.getElementById("result-card");
+const resultNombreEl = document.getElementById("result-nombre");
+const resultMetaEl = document.getElementById("result-meta");
+const resultTurnoInfoEl = document.getElementById("result-turno-info");
+const resultFeedbackEl = document.getElementById("result-feedback");
+
+setInterval(() => { clockEl.textContent = new Date().toLocaleTimeString("es-PE", { hour:"2-digit", minute:"2-digit" }); }, 1000);
+
+let rostrosDB = [];
+let faceMatcher = null;
+let modelosListos = false;
+let camaraStream = null;
+let scanning = false;      // el loop de reconocimiento esta corriendo
+let procesando = false;    // ya se encontro match y se esta marcando (ignora nuevos frames)
+let accionActual = null;
+let stableDni = null, stableCount = 0;
+let recognizeTimer = null;
+
+async function cargarModelos(){
+  await Promise.all([
+    faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+  ]);
+  modelosListos = true;
+}
+
+async function cargarRostros(){
+  const { data, error } = await sb.rpc("asis_rostros_listar");
+  if(error){ console.error("asis_rostros_listar", error); return; }
+  rostrosDB = (data || []).map(r => ({ dni: r.dni, nombre: r.nombre, embedding: new Float32Array(r.embedding) }));
+  faceMatcher = rostrosDB.length
+    ? new faceapi.FaceMatcher(rostrosDB.map(r => new faceapi.LabeledFaceDescriptors(r.dni, [r.embedding])), RECOGNIZE_THRESHOLD)
+    : null;
+}
+
+async function iniciarCamara(){
+  if(camaraStream) return;
+  camaraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: 640, height: 480 }, audio: false });
+  video.srcObject = camaraStream;
+  await new Promise(res => video.onloadedmetadata = res);
+  overlayCanvas.width = video.videoWidth;
+  overlayCanvas.height = video.videoHeight;
+}
+function detenerCamara(){
+  if(camaraStream){ camaraStream.getTracks().forEach(t => t.stop()); camaraStream = null; }
+  video.srcObject = null;
+}
+
+async function detectarUnaVez(){
+  return faceapi
+    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+    .withFaceLandmarks()
+    .withFaceDescriptor();
+}
+function dibujarCaja(box, color){
+  const ctx = overlayCanvas.getContext("2d");
+  ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+  if(!box) return;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  const x = overlayCanvas.width - box.x - box.width; // espejado (scaleX(-1))
+  ctx.strokeRect(x, box.y, box.width, box.height);
+}
+
+/* ---------------- Flujo: elegir accion -> escanear -> resultado ---------------- */
+
+async function abrirScan(accion){
+  accionActual = accion;
+  accionTag.textContent = ACCION_INFO[accion].tag;
+  resultCard.hidden = true;
+  resultFeedbackEl.hidden = true;
+  camUnit.hidden = false;
+  setHint(modelosListos ? "Mira a la cámara para identificarte…" : "Cargando modelos…");
+  scanView.classList.add("show");
+  stableDni = null; stableCount = 0;
+  procesando = false;
+
+  try{
+    await iniciarCamara();
+  }catch(err){
+    setHint("No se pudo acceder a la cámara: " + err.message);
+    return;
+  }
+  if(!modelosListos) await cargarModelos();
+  scanning = true;
+  loopReconocer();
+}
+
+function cerrarScan(){
+  scanning = false;
+  clearTimeout(recognizeTimer);
+  detenerCamara();
+  scanView.classList.remove("show");
+  accionActual = null;
+}
+
+function setHint(text){ scanHint.textContent = text; }
+
+async function loopReconocer(){
+  if(!scanning) return;
+  if(procesando){ recognizeTimer = setTimeout(loopReconocer, RECOGNIZE_INTERVAL_MS); return; }
+  try{
+    const det = await detectarUnaVez();
+    if(!det){
+      dibujarCaja(null);
+      stableDni = null; stableCount = 0;
+      setHint("Buscando rostro…");
+    }else if(!faceMatcher){
+      dibujarCaja(det.detection.box, "#999");
+      setHint("No hay colaboradores enrolados. Usa Registro biométrico.");
+    }else{
+      const match = faceMatcher.findBestMatch(det.descriptor);
+      const conocido = match.label !== "unknown";
+      dibujarCaja(det.detection.box, conocido ? "#16A34A" : "#E31E24");
+      if(!conocido){
+        stableDni = null; stableCount = 0;
+        setHint("Rostro no reconocido.");
+      }else{
+        stableDni === match.label ? stableCount++ : (stableDni = match.label, stableCount = 1);
+        setHint(`Identificando… (${Math.min(stableCount, STABLE_FRAMES_NEEDED)}/${STABLE_FRAMES_NEEDED})`);
+        if(stableCount >= STABLE_FRAMES_NEEDED){
+          procesando = true;
+          await procesarIdentidad(stableDni);
+        }
+      }
+    }
+  }catch(e){ console.error(e); }
+  recognizeTimer = setTimeout(loopReconocer, RECOGNIZE_INTERVAL_MS);
+}
+
+async function procesarIdentidad(dni){
+  setHint("¡Listo! Verificando…");
+  const { data, error } = await sb.rpc("asis_buscar_dni", { p_dni: dni });
+  if(error){
+    setHint(humanError(error));
+    procesando = false; stableDni = null; stableCount = 0;
+    return;
+  }
+
+  camUnit.hidden = true;
+  resultCard.hidden = false;
+  resultNombreEl.textContent = data.nombre;
+  resultMetaEl.textContent = [data.puesto, data.area].filter(Boolean).join(" · ") || "—";
+
+  const tipos = (data.marcas_hoy || []).map(m => m.tipo);
+  let tipoReal = null;
+  if(accionActual === "ingreso") tipoReal = "ingreso";
+  else if(accionActual === "salida") tipoReal = "salida";
+  else if(accionActual === "almuerzo") tipoReal = !tipos.includes("almuerzo_inicio") ? "almuerzo_inicio" : (!tipos.includes("almuerzo_fin") ? "almuerzo_fin" : null);
+
+  const ventana = dentroDeVentana(data.turno);
+  if(ventana){
+    const fueraEnIngreso = tipoReal === "ingreso" && !ventana.ok;
+    resultTurnoInfoEl.hidden = false;
+    resultTurnoInfoEl.textContent = `Turno ${data.turno} · Ingreso ${ventana.label}` + (fueraEnIngreso ? " · fuera de horario" : "");
+    resultTurnoInfoEl.classList.toggle("warn", fueraEnIngreso);
+  }else{
+    resultTurnoInfoEl.hidden = true;
+  }
+
+  if(!tipoReal){
+    mostrarFeedback("Ya completaste tu almuerzo de hoy.", "error");
+    setTimeout(volverAInicio, RESET_DESPUES_MS);
+    return;
+  }
+  await marcarAsistencia(data.dni, tipoReal);
+}
+
+function capturarFrameJPEG(){
+  const canvas = document.createElement("canvas");
+  const MAX_W = 480;
+  const scale = Math.min(1, MAX_W / video.videoWidth);
+  canvas.width = Math.round(video.videoWidth * scale);
+  canvas.height = Math.round(video.videoHeight * scale);
+  const ctx = canvas.getContext("2d");
+  ctx.translate(canvas.width, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  return new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.6));
+}
+async function subirFoto(blob, dni, tipo){
+  try{
+    const path = (new Date().toISOString().slice(0,10)) + "/" + dni + "-" + tipo + "-" + Date.now() + ".jpg";
+    const { error } = await sb.storage.from(FOTO_BUCKET).upload(path, blob, { contentType: "image/jpeg", upsert: false });
+    if(error) return null;
+    return path;
+  }catch(e){ return null; }
+}
+function obtenerGeo(){
+  return new Promise(resolve => {
+    if(!navigator.geolocation) return resolve({ lat: null, lng: null });
+    let done = false;
+    const finish = (v) => { if(!done){ done = true; resolve(v); } };
+    navigator.geolocation.getCurrentPosition(
+      pos => finish({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => finish({ lat: null, lng: null }),
+      { timeout: 1200 }
+    );
+    setTimeout(() => finish({ lat: null, lng: null }), 1200);
+  });
+}
+function mostrarFeedback(text, kind){
+  resultFeedbackEl.hidden = false;
+  resultFeedbackEl.textContent = text;
+  resultFeedbackEl.className = "result-feedback " + kind;
+}
+
+async function marcarAsistencia(dni, tipoReal){
+  mostrarFeedback("Registrando…", "info");
+  let fotoPath = null;
+  if(tipoReal === "ingreso" || tipoReal === "salida"){
+    const blob = await capturarFrameJPEG();
+    fotoPath = await subirFoto(blob, dni, tipoReal);
+    if(!fotoPath){
+      mostrarFeedback("No se pudo tomar la foto de evidencia. Intenta de nuevo.", "error");
+      procesando = false; stableDni = null; stableCount = 0;
+      camUnit.hidden = false; resultCard.hidden = true;
+      return;
+    }
+  }
+  const geo = await obtenerGeo();
+  const { data, error } = await sb.rpc("asis_marcar", {
+    p_dni: dni, p_tipo: tipoReal, p_lat: geo.lat, p_lng: geo.lng,
+    p_dispositivo: DISPOSITIVO, p_foto_path: fotoPath,
+  });
+  if(error){
+    mostrarFeedback(humanError(error), "error");
+    setTimeout(volverAInicio, RESET_DESPUES_MS);
+    return;
+  }
+  mostrarFeedback(`✅ ${TIPO_LABEL[tipoReal]} registrado — ${fmtHora(data.registrado_en)}`, "success");
+  setTimeout(volverAInicio, RESET_DESPUES_MS);
+}
+
+function volverAInicio(){
+  cerrarScan();
+}
+
+document.getElementById("btn-home-ingreso").addEventListener("click", () => abrirScan("ingreso"));
+document.getElementById("btn-home-almuerzo").addEventListener("click", () => abrirScan("almuerzo"));
+document.getElementById("btn-home-salida").addEventListener("click", () => abrirScan("salida"));
+document.getElementById("btn-scan-cancel").addEventListener("click", volverAInicio);
+
+/* ---------------- Registro biometrico (enrolamiento) ---------------- */
+const enrollModal = document.getElementById("enroll-modal");
+const enrollCamSlot = document.getElementById("enroll-cam-slot");
+const enrollDni = document.getElementById("enroll-dni");
+const enrollBuscarBtn = document.getElementById("enroll-buscar");
+const enrollInfo = document.getElementById("enroll-info");
+const enrollCapturarBtn = document.getElementById("enroll-capturar");
+const enrollStatus = document.getElementById("enroll-status");
+let enrollEmpleado = null;
+
+document.getElementById("btn-enroll-open").addEventListener("click", async () => {
+  enrollModal.classList.add("show");
+  enrollEmpleado = null;
+  enrollDni.value = "";
+  enrollInfo.textContent = "";
+  enrollStatus.textContent = "";
+  enrollCapturarBtn.disabled = true;
+  enrollCamSlot.hidden = true;
+});
+document.getElementById("enroll-cerrar").addEventListener("click", () => {
+  enrollModal.classList.remove("show");
+  detenerCamara();
+});
+
+enrollBuscarBtn.addEventListener("click", async () => {
+  const dni = enrollDni.value.trim();
+  if(!dni){ enrollInfo.textContent = "Ingresa un DNI."; return; }
+  enrollInfo.textContent = "Buscando…";
+  enrollCapturarBtn.disabled = true;
+  const { data, error } = await sb.rpc("asis_buscar_dni", { p_dni: dni });
+  if(error){
+    enrollEmpleado = null;
+    enrollInfo.textContent = humanError(error);
+    return;
+  }
+  enrollEmpleado = data;
+  enrollInfo.textContent = `${data.nombre} — ${[data.puesto, data.area].filter(Boolean).join(" · ")}`;
+  if(!modelosListos) await cargarModelos();
+  try{
+    await iniciarCamara();
+    enrollCamSlot.hidden = false;
+    enrollCamSlot.appendChild(camUnit);
+    camUnit.hidden = false;
+    enrollCapturarBtn.disabled = false;
+  }catch(err){
+    enrollInfo.textContent = "No se pudo acceder a la cámara: " + err.message;
+  }
+});
+
+enrollCapturarBtn.addEventListener("click", async () => {
+  if(!enrollEmpleado) return;
+  enrollCapturarBtn.disabled = true;
+  const muestras = [];
+  for(let i = 0; i < ENROLL_SAMPLES; i++){
+    enrollStatus.className = "enroll-status";
+    enrollStatus.textContent = `Capturando muestra ${i+1}/${ENROLL_SAMPLES}… mira a la cámara.`;
+    const det = await detectarUnaVez();
+    if(!det){
+      enrollStatus.className = "enroll-status bad";
+      enrollStatus.textContent = "No se detectó un rostro. Acércate a la cámara e inténtalo de nuevo.";
+      enrollCapturarBtn.disabled = false;
+      return;
+    }
+    muestras.push(Array.from(det.descriptor));
+    await new Promise(r => setTimeout(r, 400));
+  }
+  const promedio = muestras[0].map((_, i) => muestras.reduce((s, m) => s + m[i], 0) / muestras.length);
+
+  const { error } = await sb.rpc("asis_rostros_enrolar", {
+    p_dni: enrollEmpleado.dni, p_nombre: enrollEmpleado.nombre, p_embedding: promedio,
+  });
+  if(error){
+    enrollStatus.className = "enroll-status bad";
+    enrollStatus.textContent = humanError(error);
+    enrollCapturarBtn.disabled = false;
+    return;
+  }
+  await cargarRostros();
+  enrollStatus.className = "enroll-status ok";
+  enrollStatus.textContent = `Rostro de ${enrollEmpleado.nombre} enrolado correctamente.`;
+  enrollCapturarBtn.disabled = false;
+});
+
+/* ---------------- Arranque ---------------- */
+async function main(){
+  try{
+    await cargarModelos();
+    await cargarRostros();
+  }catch(err){
+    console.error(err);
+  }
+}
+main();
+</script>
+</body>
+</html>

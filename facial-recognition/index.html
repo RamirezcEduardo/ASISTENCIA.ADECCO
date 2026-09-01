@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prototipo · Reconocimiento Facial Asistencia</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#171a21; --border:#262b36; --text:#eef1f6; --muted:#9aa3b2;
+    --green:#2fbf71; --red:#e5484d; --blue:#3b82f6; --yellow:#e6b800;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;}
+  header{padding:16px 20px;border-bottom:1px solid var(--border);}
+  header h1{margin:0;font-size:18px;}
+  header p{margin:4px 0 0;color:var(--muted);font-size:13px;}
+  main{display:grid;grid-template-columns:minmax(320px,480px) 1fr;gap:20px;padding:20px;max-width:1200px;margin:0 auto;}
+  @media (max-width:860px){ main{grid-template-columns:1fr;} }
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px;}
+  .card h2{margin:0 0 12px;font-size:15px;}
+  .video-wrap{position:relative;border-radius:12px;overflow:hidden;background:#000;aspect-ratio:4/3;}
+  video, canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);}
+  .status{margin-top:10px;padding:10px 12px;border-radius:10px;font-size:14px;font-weight:600;text-align:center;background:#1e2230;color:var(--muted);}
+  .status.ok{background:rgba(47,191,113,.15);color:var(--green);}
+  .status.bad{background:rgba(229,72,77,.15);color:var(--red);}
+  .status.warn{background:rgba(230,184,0,.15);color:var(--yellow);}
+  label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;margin-top:10px;}
+  input{width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:#0f1115;color:var(--text);font-size:14px;}
+  .row{display:flex;gap:10px;margin-top:14px;}
+  button{cursor:pointer;border:none;border-radius:8px;padding:10px 14px;font-size:14px;font-weight:600;}
+  .btn-primary{background:var(--blue);color:#fff;flex:1;}
+  .btn-primary:disabled{opacity:.5;cursor:not-allowed;}
+  .btn-ghost{background:#232838;color:var(--text);}
+  .btn-danger{background:transparent;color:var(--red);border:1px solid rgba(229,72,77,.4);}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--border);}
+  th{color:var(--muted);font-weight:600;}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;background:#232838;color:var(--muted);}
+  .hint{color:var(--muted);font-size:12px;line-height:1.5;}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;}
+  .toolbar button{font-size:12px;padding:8px 10px;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🧪 Prototipo — Reconocimiento facial para marcación de asistencia</h1>
+  <p>Corre 100% en el navegador con face-api.js (TensorFlow.js). Nada sale del dispositivo: los rostros se guardan como
+  vectores numéricos (descriptores) en este navegador, no como fotos. Es un entorno aislado de prueba — no toca la app de producción.</p>
+</header>
+
+<main>
+  <div>
+    <div class="card">
+      <h2>Cámara</h2>
+      <div class="video-wrap">
+        <video id="video" autoplay muted playsinline></video>
+        <canvas id="overlay"></canvas>
+      </div>
+      <div class="status" id="status">Cargando modelos…</div>
+    </div>
+
+    <div class="card">
+      <h2>1. Enrolar colaborador</h2>
+      <p class="hint">Captura el rostro de referencia. Se toman 3 muestras y se promedian para un descriptor más estable.</p>
+      <label for="dni">DNI</label>
+      <input id="dni" inputmode="numeric" maxlength="15" placeholder="Ej. 12345678">
+      <label for="nombre">Nombre</label>
+      <input id="nombre" placeholder="Ej. Juan Pérez">
+      <div class="row">
+        <button class="btn-primary" id="btn-enroll" disabled>Capturar rostro</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>2. Reconocer</h2>
+      <p class="hint">Identifica en vivo comparando contra los rostros enrolados. Umbral de distancia: <span id="threshold-label">0.50</span></p>
+      <input type="range" id="threshold" min="0.3" max="0.7" step="0.01" value="0.5">
+      <div class="row">
+        <button class="btn-primary" id="btn-recognize" disabled>Iniciar reconocimiento</button>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2>Colaboradores enrolados (<span id="count">0</span>)</h2>
+      <div class="toolbar" style="margin-bottom:12px;">
+        <button class="btn-ghost" id="btn-export">Exportar JSON</button>
+        <button class="btn-ghost" id="btn-import">Importar JSON</button>
+        <button class="btn-danger" id="btn-clear">Borrar todo</button>
+        <input type="file" id="file-import" accept="application/json" hidden>
+      </div>
+      <table>
+        <thead><tr><th>DNI</th><th>Nombre</th><th></th></tr></thead>
+        <tbody id="tbl-body"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Registro de reconocimientos</h2>
+      <p class="hint">Simulación local de marcación — aquí no se llama todavía a Supabase, solo se prueba la identificación.</p>
+      <table>
+        <thead><tr><th>Hora</th><th>DNI</th><th>Nombre</th><th>Distancia</th></tr></thead>
+        <tbody id="log-body"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<script src="vendor/face-api.min.js"></script>
+<script>
+const MODEL_URL = "vendor/models";
+const STORAGE_KEY = "asis_facial_prototipo_rostros";
+const RECOGNIZE_INTERVAL_MS = 350;
+const ENROLL_SAMPLES = 3;
+
+const video = document.getElementById("video");
+const overlay = document.getElementById("overlay");
+const statusEl = document.getElementById("status");
+const btnEnroll = document.getElementById("btn-enroll");
+const btnRecognize = document.getElementById("btn-recognize");
+const dniInput = document.getElementById("dni");
+const nombreInput = document.getElementById("nombre");
+const thresholdInput = document.getElementById("threshold");
+const thresholdLabel = document.getElementById("threshold-label");
+const tblBody = document.getElementById("tbl-body");
+const logBody = document.getElementById("log-body");
+const countEl = document.getElementById("count");
+
+let recognizing = false;
+let recognizeTimer = null;
+let lastMarcado = {}; // dni -> timestamp, para no loguear el mismo rostro cada 350ms
+
+function setStatus(text, kind){
+  statusEl.textContent = text;
+  statusEl.className = "status" + (kind ? " " + kind : "");
+}
+
+function loadFaces(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  }catch(e){ return []; }
+}
+function saveFaces(list){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+}
+
+function renderTable(){
+  const faces = loadFaces();
+  countEl.textContent = faces.length;
+  tblBody.innerHTML = faces.map((f, i) =>
+    `<tr><td>${f.dni}</td><td>${f.nombre}</td><td><button class="btn-danger" data-idx="${i}" onclick="eliminarRostro(${i})">Quitar</button></td></tr>`
+  ).join("") || `<tr><td colspan="3" class="hint">Sin colaboradores enrolados todavía.</td></tr>`;
+}
+
+function eliminarRostro(idx){
+  const faces = loadFaces();
+  faces.splice(idx, 1);
+  saveFaces(faces);
+  renderTable();
+  refreshMatcher();
+}
+
+function agregarLog(dni, nombre, distancia){
+  const hora = new Date().toLocaleTimeString("es-PE");
+  const row = document.createElement("tr");
+  row.innerHTML = `<td>${hora}</td><td>${dni}</td><td>${nombre}</td><td>${distancia.toFixed(3)}</td>`;
+  logBody.prepend(row);
+}
+
+let faceMatcher = null;
+function refreshMatcher(){
+  const faces = loadFaces();
+  if(faces.length === 0){ faceMatcher = null; return; }
+  const labeled = faces.map(f => new faceapi.LabeledFaceDescriptors(
+    f.dni + "|" + f.nombre,
+    [new Float32Array(f.descriptor)]
+  ));
+  faceMatcher = new faceapi.FaceMatcher(labeled, parseFloat(thresholdInput.value));
+}
+
+thresholdInput.addEventListener("input", () => {
+  thresholdLabel.textContent = parseFloat(thresholdInput.value).toFixed(2);
+  refreshMatcher();
+});
+
+async function iniciarCamara(){
+  const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: 640, height: 480 }, audio: false });
+  video.srcObject = stream;
+  await new Promise(res => video.onloadedmetadata = res);
+  overlay.width = video.videoWidth;
+  overlay.height = video.videoHeight;
+}
+
+async function detectarUnaVez(){
+  return faceapi
+    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+    .withFaceLandmarks()
+    .withFaceDescriptor();
+}
+
+btnEnroll.addEventListener("click", async () => {
+  const dni = dniInput.value.trim();
+  const nombre = nombreInput.value.trim();
+  if(!dni || !nombre){
+    setStatus("Ingresa DNI y nombre antes de capturar.", "warn");
+    return;
+  }
+  btnEnroll.disabled = true;
+  const descriptores = [];
+  for(let i = 0; i < ENROLL_SAMPLES; i++){
+    setStatus(`Capturando muestra ${i+1}/${ENROLL_SAMPLES}… mira a la cámara.`, "warn");
+    const det = await detectarUnaVez();
+    if(!det){
+      setStatus("No se detectó un rostro. Acércate a la cámara y vuelve a intentar.", "bad");
+      btnEnroll.disabled = false;
+      return;
+    }
+    descriptores.push(Array.from(det.descriptor));
+    await new Promise(r => setTimeout(r, 400));
+  }
+  // Promedio de las muestras para un descriptor más estable.
+  const promedio = descriptores[0].map((_, i) =>
+    descriptores.reduce((sum, d) => sum + d[i], 0) / descriptores.length
+  );
+
+  const faces = loadFaces();
+  const existente = faces.findIndex(f => f.dni === dni);
+  const registro = { dni, nombre, descriptor: promedio };
+  if(existente >= 0) faces[existente] = registro; else faces.push(registro);
+  saveFaces(faces);
+  renderTable();
+  refreshMatcher();
+  setStatus(`Rostro de ${nombre} (${dni}) enrolado correctamente.`, "ok");
+  dniInput.value = ""; nombreInput.value = "";
+  btnEnroll.disabled = false;
+});
+
+btnRecognize.addEventListener("click", () => {
+  recognizing = !recognizing;
+  btnRecognize.textContent = recognizing ? "Detener reconocimiento" : "Iniciar reconocimiento";
+  if(recognizing){
+    refreshMatcher();
+    loopReconocer();
+  }else{
+    clearTimeout(recognizeTimer);
+    const ctx = overlay.getContext("2d");
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+    setStatus("Reconocimiento detenido.");
+  }
+});
+
+async function loopReconocer(){
+  if(!recognizing) return;
+  const det = await detectarUnaVez();
+  const ctx = overlay.getContext("2d");
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+  if(!det){
+    setStatus("Buscando rostro…", "warn");
+  }else if(!faceMatcher){
+    setStatus("No hay colaboradores enrolados todavía.", "warn");
+  }else{
+    const match = faceMatcher.findBestMatch(det.descriptor);
+    const box = det.detection.box;
+    const esConocido = match.label !== "unknown";
+    ctx.strokeStyle = esConocido ? "#2fbf71" : "#e5484d";
+    ctx.lineWidth = 3;
+    // El video está espejado (scaleX(-1)); reflejamos el box en X para que calce visualmente.
+    const x = overlay.width - box.x - box.width;
+    ctx.strokeRect(x, box.y, box.width, box.height);
+
+    if(esConocido){
+      const [dni, nombre] = match.label.split("|");
+      setStatus(`✅ ${nombre} — DNI ${dni} (distancia ${match.distance.toFixed(3)})`, "ok");
+      const ahora = Date.now();
+      if(!lastMarcado[dni] || ahora - lastMarcado[dni] > 5000){
+        lastMarcado[dni] = ahora;
+        agregarLog(dni, nombre, match.distance);
+      }
+    }else{
+      setStatus(`❌ Rostro no reconocido (distancia ${match.distance.toFixed(3)})`, "bad");
+    }
+  }
+  recognizeTimer = setTimeout(loopReconocer, RECOGNIZE_INTERVAL_MS);
+}
+
+document.getElementById("btn-export").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(loadFaces(), null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "rostros_enrolados.json";
+  a.click();
+});
+
+document.getElementById("btn-import").addEventListener("click", () => document.getElementById("file-import").click());
+document.getElementById("file-import").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const text = await file.text();
+  try{
+    const data = JSON.parse(text);
+    saveFaces(data);
+    renderTable();
+    refreshMatcher();
+    setStatus(`Importados ${data.length} rostros.`, "ok");
+  }catch(err){
+    setStatus("Archivo inválido.", "bad");
+  }
+  e.target.value = "";
+});
+
+document.getElementById("btn-clear").addEventListener("click", () => {
+  if(!confirm("¿Borrar todos los rostros enrolados de este navegador?")) return;
+  saveFaces([]);
+  renderTable();
+  refreshMatcher();
+});
+
+async function main(){
+  try{
+    setStatus("Cargando modelos de reconocimiento…");
+    await Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+      faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+      faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+    ]);
+    setStatus("Solicitando acceso a la cámara…");
+    await iniciarCamara();
+    renderTable();
+    refreshMatcher();
+    btnEnroll.disabled = false;
+    btnRecognize.disabled = false;
+    setStatus("Listo. Enrola al menos un rostro para empezar a reconocer.");
+  }catch(err){
+    console.error(err);
+    setStatus("Error: " + err.message, "bad");
+  }
+}
+main();
+</script>
+</body>
+</html>

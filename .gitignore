@@ -8,3 +8,11 @@ mobile/android/build/
 mobile/android/.gradle/
 mobile/android/local.properties
 mobile/android/*.keystore
+
+# Prototipo de reconocimiento facial (Python) — entorno virtual, modelos
+# descargables y base de rostros de prueba (datos biometricos, no se sube).
+facial-recognition/python/venv/
+facial-recognition/python/models/
+facial-recognition/python/rostros_enrolados.json
+facial-recognition/*.log
+*.log
