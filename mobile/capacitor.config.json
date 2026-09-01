@@ -1,0 +1,9 @@
+{
+  "appId": "com.adecco.asistencia",
+  "appName": "ADECCO Asistencia",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  }
+}
