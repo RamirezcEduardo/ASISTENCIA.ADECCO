@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ADECCO · Centro de Control de Asistencia</title>
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<meta name="theme-color" content="#0B0D12">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0B0D12; --panel:#12151C; --panel-alt:#171B24; --border:#232733; --border-soft:#1B1F29;
+    --text:#E7EAF0; --muted:#7C8496; --text-soft:#AEB4C2;
+    --red:#FF3B4E; --red-dim:#4A1620; --red-tint:#2A121A;
+    --green:#22C55E; --green-dim:#0F2A1C; --amber:#F5A623; --amber-dim:#332508;
+    --blue:#3B82F6; --blue-dim:#0F1F3A; --purple:#A78BFA; --purple-dim:#241B3A; --cyan:#22D3EE;
+    --mono:'IBM Plex Mono',monospace;
+    --shadow:0 4px 24px rgba(0,0,0,.4);
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  button, input, select{font-family:inherit;}
+  [hidden]{display:none!important;}
+  ::-webkit-scrollbar{width:10px;height:10px;}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:6px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+
+  /* ============ Login ============ */
+  #login-screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(circle at 30% 20%, #1a1030 0%, #0B0D12 55%);z-index:50;}
+  .login-card{width:min(90vw,380px);background:var(--panel);border:1px solid var(--border);border-radius:18px;
+    padding:32px 28px;box-shadow:var(--shadow);}
+  .login-card .logo-row{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
+  .login-card .logo-row img{width:36px;height:36px;}
+  .login-card .logo-row b{font-size:19px;color:var(--red);letter-spacing:.02em;}
+  .login-card h2{margin:2px 0 22px;font-size:14px;color:var(--muted);font-weight:600;}
+  .login-card label{display:block;font-size:11.5px;color:var(--muted);margin:14px 0 5px;text-transform:uppercase;letter-spacing:.04em;}
+  .login-card input{width:100%;padding:11px 13px;border-radius:9px;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font-size:14.5px;}
+  .login-card input:focus{outline:none;border-color:var(--red);}
+  .login-card button{width:100%;margin-top:22px;padding:12px;border:none;border-radius:9px;background:var(--red);
+    color:#fff;font-weight:700;font-size:14.5px;cursor:pointer;}
+  .login-card button:disabled{opacity:.5;}
+  .login-error{margin-top:12px;font-size:12.5px;color:var(--red);display:none;}
+  .login-error.show{display:block;}
+
+  /* ============ Shell ============ */
+  #app{display:none;height:100vh;flex-direction:column;}
+  #app.show{display:flex;}
+
+  header{display:flex;align-items:center;gap:14px;padding:12px 20px;border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg,#12151C,#0F1218);flex-shrink:0;}
+  header .logo-row{display:flex;align-items:center;gap:9px;}
+  header img{width:28px;height:28px;}
+  header b.brand{font-size:15.5px;color:var(--red);letter-spacing:.02em;}
+  header .subtitle{font-size:11px;color:var(--muted);}
+  .live-pulse{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(34,197,94,.6);
+    animation:pulse 1.8s infinite;flex-shrink:0;}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.55);}70%{box-shadow:0 0 0 8px rgba(34,197,94,0);}100%{box-shadow:0 0 0 0 rgba(34,197,94,0);}}
+  header .clock{font-family:var(--mono);font-size:13.5px;color:var(--text-soft);}
+  header .spacer{flex:1;}
+  header .user-chip{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-soft);}
+  header .user-chip .role{background:var(--panel-alt);border:1px solid var(--border);border-radius:999px;padding:3px 10px;font-size:11px;color:var(--muted);}
+  header .logout-btn{background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer;}
+  header .logout-btn:hover{color:var(--text);border-color:var(--border-soft);}
+
+  nav#tabs{display:flex;gap:4px;padding:10px 20px 0;border-bottom:1px solid var(--border);background:var(--bg);flex-shrink:0;overflow-x:auto;}
+  nav#tabs button{background:none;border:none;color:var(--muted);font-size:13px;font-weight:700;padding:10px 16px;
+    border-radius:10px 10px 0 0;cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;}
+  nav#tabs button.active{color:var(--text);background:var(--panel);border-bottom:2px solid var(--red);}
+  nav#tabs button:hover:not(.active){color:var(--text-soft);}
+
+  #filter-bar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 20px;border-bottom:1px solid var(--border);
+    background:var(--panel);flex-shrink:0;}
+  #filter-bar label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin-right:4px;}
+  #filter-bar input, #filter-bar select{background:var(--panel-alt);border:1px solid var(--border);color:var(--text);
+    border-radius:8px;padding:7px 10px;font-size:12.5px;}
+  #filter-bar button{background:var(--red);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;}
+  #filter-bar .hint{margin-left:auto;font-size:11.5px;color:var(--muted);font-family:var(--mono);}
+
+  main{flex:1;min-height:0;overflow:auto;padding:20px;}
+  .tab-panel{display:none;}
+  .tab-panel.active{display:block;}
+
+  /* ============ KPI tiles ============ */
+  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;}
+  .kpi-tile{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px 18px;position:relative;overflow:hidden;}
+  .kpi-tile .bar{position:absolute;left:0;top:0;bottom:0;width:3px;}
+  .kpi-tile .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;}
+  .kpi-tile .value{font-family:var(--mono);font-size:28px;font-weight:700;}
+  .kpi-tile .sub{font-size:11px;color:var(--muted);margin-top:4px;}
+
+  /* ============ Cards / grids ============ */
+  .grid-2{display:grid;grid-template-columns:1.3fr 1fr;gap:16px;}
+  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+  @media (max-width:980px){.grid-2,.grid-3{grid-template-columns:1fr;}}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin-bottom:16px;}
+  .card h3{margin:0 0 4px;font-size:14px;}
+  .card p.hint{margin:0 0 12px;font-size:11.5px;color:var(--muted);}
+  .chart-box{position:relative;height:260px;}
+  .chart-box.tall{height:340px;}
+
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border-soft);white-space:nowrap;}
+  th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.03em;position:sticky;top:0;background:var(--panel);}
+  tbody tr:hover{background:var(--panel-alt);}
+  .table-scroll{max-height:420px;overflow:auto;border-radius:10px;}
+  td.num, th.num{text-align:right;font-family:var(--mono);}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:10.5px;font-weight:700;}
+  .pill.a{background:var(--green-dim);color:var(--green);}
+  .pill.v{background:var(--purple-dim);color:var(--purple);}
+  .pill.f{background:var(--red-tint);color:var(--red);}
+  .pill.fj{background:var(--amber-dim);color:var(--amber);}
+
+  /* ============ Live feed ============ */
+  #feed-list{display:flex;flex-direction:column;gap:0;max-height:520px;overflow:auto;}
+  .feed-row{display:flex;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px solid var(--border-soft);
+    animation:feedIn .35s ease;}
+  @keyframes feedIn{from{opacity:0;transform:translateY(-6px);background:var(--panel-alt);}to{opacity:1;transform:translateY(0);}}
+  .feed-row .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+  .feed-row .dot.ingreso{background:var(--green);} .feed-row .dot.almuerzo_inicio,.feed-row .dot.almuerzo_fin{background:var(--amber);}
+  .feed-row .dot.salida{background:var(--red);}
+  .feed-row .nombre{font-weight:700;font-size:13px;}
+  .feed-row .meta{font-size:11px;color:var(--muted);}
+  .feed-row .tipo{margin-left:auto;font-size:11.5px;color:var(--text-soft);font-weight:600;}
+  .feed-row .hora{font-family:var(--mono);font-size:12px;color:var(--muted);min-width:56px;text-align:right;}
+  .feed-empty{padding:30px;text-align:center;color:var(--muted);font-size:13px;}
+
+  .loading{padding:30px;text-align:center;color:var(--muted);font-size:13px;}
+  .btn-sm{background:var(--panel-alt);border:1px solid var(--border);color:var(--text-soft);border-radius:8px;
+    padding:6px 12px;font-size:12px;cursor:pointer;}
+  .btn-sm:hover{color:var(--text);}
+  .btn-sm.primary{background:var(--red);border-color:var(--red);color:#fff;}
+
+  .sueldo-input{width:100px;background:var(--panel-alt);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:5px 8px;font-size:12.5px;font-family:var(--mono);}
+  .missing{color:var(--amber);}
+  .banner{background:var(--amber-dim);color:var(--amber);border-radius:10px;padding:10px 14px;font-size:12.5px;margin-bottom:14px;}
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <form class="login-card" id="login-form">
+    <div class="logo-row"><img src="icons/icon-512.png" alt="Adecco"><b>ADECCO</b></div>
+    <h2>Centro de Control de Asistencia</h2>
+    <label for="login-username">Usuario</label>
+    <input id="login-username" autocomplete="username" required>
+    <label for="login-password">Contraseña</label>
+    <input id="login-password" type="password" autocomplete="current-password" required>
+    <button type="submit" id="login-btn">Ingresar</button>
+    <div class="login-error" id="login-error"></div>
+  </form>
+</div>
+
+<div id="app">
+  <header>
+    <div class="logo-row"><img src="icons/icon-512.png" alt="Adecco"><b class="brand">ADECCO</b></div>
+    <span class="subtitle">Centro de Control</span>
+    <span class="live-pulse" title="En vivo"></span>
+    <span class="clock" id="clock">--:--:--</span>
+    <div class="spacer"></div>
+    <div class="user-chip"><span id="user-nombre">—</span><span class="role" id="user-rol">—</span></div>
+    <button class="logout-btn" id="logout-btn">Salir</button>
+  </header>
+
+  <nav id="tabs">
+    <button data-tab="vivo" class="active">🟢 En Vivo</button>
+    <button data-tab="ausentismo">📉 Ausentismo</button>
+    <button data-tab="rotacion">🔁 Rotación</button>
+    <button data-tab="general">📊 Asistencia General</button>
+    <button data-tab="pagos">💰 Pagos</button>
+  </nav>
+
+  <div id="filter-bar">
+    <label>Desde</label><input type="date" id="f-desde">
+    <label>Hasta</label><input type="date" id="f-hasta">
+    <label>Área</label><select id="f-area"><option value="">Todas</option></select>
+    <button id="f-aplicar">Aplicar</button>
+    <span class="hint" id="f-hint"></span>
+  </div>
+
+  <main>
+    <section class="tab-panel active" id="panel-vivo"></section>
+    <section class="tab-panel" id="panel-ausentismo"></section>
+    <section class="tab-panel" id="panel-rotacion"></section>
+    <section class="tab-panel" id="panel-general"></section>
+    <section class="tab-panel" id="panel-pagos"></section>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+const SUPABASE_URL = "https://zlukrktpjffiycarpduc.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_QFLNZihxZRqdvyc-GSRZPw_Q-rkA6No";
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const SESSION_KEY = "asis-control-token";
+const ROLE_LABELS = { admin:"Administrador", gerencia:"Gerencia", coordinador:"Coordinador", rrhh:"Gestión Humana", supervisor:"Supervisor" };
+
+/* Mismos codigos/colores que el modulo Asistencia y Rotacion de Adecco
+   KPI (asistencia.js) -- no reinventar la clasificacion de negocio. */
+const ASIS_CODE_LABEL = { A:'Asistió', AM:'At. Médica', DF:'Desc. Físico', DM:'Desc. Médico', DT:'Desc. Trabajado',
+  F:'Falta', FRD:'Feriado', LCGH:'Lic. c/goce', LSGH:'Lic. s/goce', P:'Permiso', S:'Suspensión', V:'Vacaciones' };
+const ASIS_BUCKETS = [
+  { key:'A', label:'Asistencia', codes:['A'], color:'#22C55E' },
+  { key:'V', label:'Vacaciones', codes:['V'], color:'#A78BFA' },
+  { key:'F', label:'Faltas', codes:['F'], color:'#FF3B4E' },
+  { key:'FJ', label:'F.J. (Justificada)', codes:['AM','DF','DM','DT','FRD','LCGH','LSGH','P','S'], color:'#F5A623' },
+];
+function bucketOf(code){
+  const c = (code||'').toUpperCase().trim();
+  return ASIS_BUCKETS.find(b => b.codes.includes(c)) || null;
+}
+const TIPO_LABEL = { ingreso:'Ingreso', almuerzo_inicio:'Salida a almuerzo', almuerzo_fin:'Retorno de almuerzo', salida:'Salida' };
+const TURNO_INICIO = { "MAÑANA":"06:00", "TARDE":"12:00", "NOCHE":"20:00" };
+
+function fmtHora(iso){ return new Date(iso).toLocaleTimeString("es-PE",{hour:"2-digit",minute:"2-digit",hour12:false}); }
+function fmtFecha(d){ return new Date(d+"T00:00:00").toLocaleDateString("es-PE",{day:"2-digit",month:"short"}); }
+function todayISO(){ return new Date().toLocaleDateString("sv-SE"); }
+function monthStartISO(){ const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-01`; }
+function money(n){ return "S/ " + (Number(n)||0).toLocaleString("es-PE",{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function humanError(err){
+  const code = (err && err.message) ? err.message.replace(/^.*?:\s*/,"").trim() : "";
+  const MSGS = { SIN_PERMISO:"No tienes permiso para esto.", DNI_NO_ENCONTRADO:"DNI no encontrado.", SUELDO_INVALIDO:"Sueldo inválido." };
+  return MSGS[code] || (err && err.message) || "Error desconocido.";
+}
+
+/* ================= Sesión / login ================= */
+let session = null; // {token, nombre, rol, permisos}
+
+// b2c_login / b2c_sesion_actual devuelven {token, usuario:{nombre,rol,...}, permisos:[...]}
+// (mismo esquema que usa index.html) -- se aplana aca para no repetir ".usuario." en todo el archivo.
+function aplanarSesion(token, data){
+  return { token, nombre: data.usuario?.nombre, rol: data.usuario?.rol, permisos: data.permisos || [] };
+}
+
+async function intentarSesionGuardada(){
+  let token = null;
+  try{ token = localStorage.getItem(SESSION_KEY); }catch(e){}
+  if(!token) return false;
+  const { data, error } = await sb.rpc("b2c_sesion_actual", { p_token: token });
+  if(error || !data || !(data.permisos || []).includes("view.asistencia")){
+    try{ localStorage.removeItem(SESSION_KEY); }catch(e){}
+    return false;
+  }
+  session = aplanarSesion(token, data);
+  return true;
+}
+
+document.getElementById("login-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const errorEl = document.getElementById("login-error");
+  const btn = document.getElementById("login-btn");
+  errorEl.classList.remove("show");
+  const username = document.getElementById("login-username").value.trim();
+  const password = document.getElementById("login-password").value;
+  btn.disabled = true; btn.textContent = "Ingresando…";
+  const { data, error } = await sb.rpc("b2c_login", { p_username: username, p_password: password });
+  btn.disabled = false; btn.textContent = "Ingresar";
+  if(error || !data){ errorEl.textContent = "Usuario o contraseña incorrectos."; errorEl.classList.add("show"); return; }
+  if(!(data.permisos || []).includes("view.asistencia")){
+    errorEl.textContent = "Tu cuenta no tiene acceso al Centro de Control."; errorEl.classList.add("show"); return;
+  }
+  session = aplanarSesion(data.token, data);
+  try{ localStorage.setItem(SESSION_KEY, data.token); }catch(e){}
+  iniciarApp();
+});
+
+document.getElementById("logout-btn").addEventListener("click", async () => {
+  try{ await sb.rpc("b2c_logout", { p_token: session.token }); }catch(e){}
+  try{ localStorage.removeItem(SESSION_KEY); }catch(e){}
+  location.reload();
+});
+
+setInterval(() => {
+  const el = document.getElementById("clock");
+  if(el) el.textContent = new Date().toLocaleTimeString("es-PE",{hour12:false});
+}, 1000);
+
+/* ================= RPC helpers ================= */
+async function rpc(nombre, params){
+  const { data, error } = await sb.rpc(nombre, { p_token: session.token, ...params });
+  if(error) throw error;
+  return data;
+}
+
+/* ================= Filtros globales ================= */
+const filtros = { desde: monthStartISO(), hasta: todayISO(), area: "" };
+document.getElementById("f-desde").value = filtros.desde;
+document.getElementById("f-hasta").value = filtros.hasta;
+document.getElementById("f-aplicar").addEventListener("click", () => {
+  filtros.desde = document.getElementById("f-desde").value || filtros.desde;
+  filtros.hasta = document.getElementById("f-hasta").value || filtros.hasta;
+  filtros.area = document.getElementById("f-area").value || "";
+  renderTabActivo();
+});
+
+async function cargarAreas(){
+  try{
+    const areas = await rpc("asis_areas", {});
+    const sel = document.getElementById("f-area");
+    sel.innerHTML = '<option value="">Todas</option>' + (areas||[]).map(a => `<option value="${a}">${a}</option>`).join("");
+  }catch(e){ console.error(e); }
+}
+
+/* ================= Tabs ================= */
+const charts = {};
+function destroyChart(key){ if(charts[key]){ charts[key].destroy(); delete charts[key]; } }
+
+let tabActivo = "vivo";
+document.querySelectorAll("#tabs button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#tabs button").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+    btn.classList.add("active");
+    tabActivo = btn.dataset.tab;
+    document.getElementById("panel-" + tabActivo).classList.add("active");
+    pararFeedVivo();
+    renderTabActivo();
+  });
+});
+function renderTabActivo(){
+  document.getElementById("f-hint").textContent = `${fmtFecha(filtros.desde)} → ${fmtFecha(filtros.hasta)}`;
+  if(tabActivo === "vivo") renderVivo();
+  else if(tabActivo === "ausentismo") renderAusentismo();
+  else if(tabActivo === "rotacion") renderRotacion();
+  else if(tabActivo === "general") renderGeneral();
+  else if(tabActivo === "pagos") renderPagos();
+}
+
+/* ================= TAB: En Vivo ================= */
+let feedTimer = null;
+let feedIdsVistos = new Set();
+function pararFeedVivo(){ clearTimeout(feedTimer); feedTimer = null; }
+
+function kpiTile(label, value, sub, color){
+  return `<div class="kpi-tile"><div class="bar" style="background:${color}"></div>
+    <div class="label">${label}</div><div class="value" style="color:${color}">${value}</div>
+    <div class="sub">${sub||""}</div></div>`;
+}
+
+async function renderVivo(){
+  const panel = document.getElementById("panel-vivo");
+  panel.innerHTML = `<div class="loading">Cargando…</div>`;
+  await tickVivo(true);
+  loopVivo();
+}
+async function loopVivo(){
+  if(tabActivo !== "vivo") return;
+  await tickVivo(false);
+  feedTimer = setTimeout(loopVivo, 5000);
+}
+async function tickVivo(primeraVez){
+  const hoy = todayISO();
+  let censoHoy = [], marcasHoy = [];
+  try{
+    [censoHoy, marcasHoy] = await Promise.all([
+      rpc("asis_censo", { p_desde: hoy, p_hasta: hoy, p_area: filtros.area || null }),
+      rpc("asis_reporte", { p_desde: hoy, p_hasta: hoy, p_area: filtros.area || null }),
+    ]);
+  }catch(e){
+    document.getElementById("panel-vivo").innerHTML = `<div class="loading">Error: ${humanError(e)}</div>`;
+    return;
+  }
+
+  const activos = censoHoy.filter(r => r.estado === "ACTIVO");
+  const totalActivos = activos.length;
+  const dniIngreso = new Set(marcasHoy.filter(m => m.tipo === "ingreso").map(m => m.dni));
+  const dniAlmuerzoFuera = new Set(marcasHoy.filter(m => m.tipo === "almuerzo_inicio").map(m => m.dni));
+  const dniAlmuerzoVuelta = new Set(marcasHoy.filter(m => m.tipo === "almuerzo_fin").map(m => m.dni));
+  const dniSalida = new Set(marcasHoy.filter(m => m.tipo === "salida").map(m => m.dni));
+  const enAlmuerzo = [...dniAlmuerzoFuera].filter(d => !dniAlmuerzoVuelta.has(d)).length;
+  const ausentes = totalActivos - dniIngreso.size;
+
+  let tardanzas = 0;
+  marcasHoy.filter(m => m.tipo === "ingreso").forEach(m => {
+    const inicio = TURNO_INICIO[(m.turno||"").trim().toUpperCase()];
+    if(!inicio) return;
+    if(fmtHora(m.registrado_en) > inicio) tardanzas++;
+  });
+
+  if(primeraVez){
+    feedIdsVistos = new Set(marcasHoy.map(m => m.id));
+    document.getElementById("panel-vivo").innerHTML = `
+      <div class="kpi-grid">
+        ${kpiTile("Activos hoy", totalActivos, filtros.area || "Todas las áreas", "#3B82F6")}
+        ${kpiTile("Marcaron ingreso", dniIngreso.size, totalActivos ? Math.round(dniIngreso.size/totalActivos*100)+"% del activo" : "", "#22C55E")}
+        ${kpiTile("En almuerzo", enAlmuerzo, "salieron y no volvieron", "#F5A623")}
+        ${kpiTile("Ya marcaron salida", dniSalida.size, "", "#A78BFA")}
+        ${kpiTile("Tardanzas hoy", tardanzas, "ingreso fuera de ventana", "#FF3B4E")}
+        ${kpiTile("Ausentes (aún)", Math.max(0,ausentes), "activos sin ingreso marcado", "#7C8496")}
+      </div>
+      <div class="card">
+        <h3>Feed de marcaciones — hoy</h3>
+        <p class="hint">Se actualiza solo cada 5s. Últimas marcaciones primero.</p>
+        <div id="feed-list"></div>
+      </div>
+    `;
+    renderFeedList(marcasHoy);
+  }else{
+    // Solo actualiza KPIs + agrega filas nuevas al feed (evita "parpadeo" del resto).
+    const kpiGrid = document.querySelector("#panel-vivo .kpi-grid");
+    if(kpiGrid) kpiGrid.innerHTML = `
+      ${kpiTile("Activos hoy", totalActivos, filtros.area || "Todas las áreas", "#3B82F6")}
+      ${kpiTile("Marcaron ingreso", dniIngreso.size, totalActivos ? Math.round(dniIngreso.size/totalActivos*100)+"% del activo" : "", "#22C55E")}
+      ${kpiTile("En almuerzo", enAlmuerzo, "salieron y no volvieron", "#F5A623")}
+      ${kpiTile("Ya marcaron salida", dniSalida.size, "", "#A78BFA")}
+      ${kpiTile("Tardanzas hoy", tardanzas, "ingreso fuera de ventana", "#FF3B4E")}
+      ${kpiTile("Ausentes (aún)", Math.max(0,ausentes), "activos sin ingreso marcado", "#7C8496")}
+    `;
+    const nuevas = marcasHoy.filter(m => !feedIdsVistos.has(m.id));
+    if(nuevas.length){
+      nuevas.forEach(m => feedIdsVistos.add(m.id));
+      renderFeedList(marcasHoy);
+    }
+  }
+}
+function renderFeedList(marcas){
+  const list = document.getElementById("feed-list");
+  if(!list) return;
+  const ordenadas = [...marcas].sort((a,b) => new Date(b.registrado_en) - new Date(a.registrado_en));
+  if(!ordenadas.length){ list.innerHTML = `<div class="feed-empty">Todavía no hay marcaciones hoy.</div>`; return; }
+  list.innerHTML = ordenadas.map(m => `
+    <div class="feed-row">
+      <span class="dot ${m.tipo}"></span>
+      <span class="nombre">${m.nombre}</span>
+      <span class="meta">${[m.area, m.turno].filter(Boolean).join(" · ")}</span>
+      <span class="tipo">${TIPO_LABEL[m.tipo]}</span>
+      <span class="hora">${fmtHora(m.registrado_en)}</span>
+    </div>
+  `).join("");
+}
+
+/* ================= TAB: Ausentismo ================= */
+async function renderAusentismo(){
+  const panel = document.getElementById("panel-ausentismo");
+  panel.innerHTML = `<div class="loading">Cargando…</div>`;
+  let censo;
+  try{ censo = await rpc("asis_censo", { p_desde: filtros.desde, p_hasta: filtros.hasta, p_area: filtros.area || null }); }
+  catch(e){ panel.innerHTML = `<div class="loading">Error: ${humanError(e)}</div>`; return; }
+
+  const conCodigo = censo.filter(r => r.asistencia);
+  const total = conCodigo.length;
+  const porBucket = {}; ASIS_BUCKETS.forEach(b => porBucket[b.key] = 0);
+  conCodigo.forEach(r => { const b = bucketOf(r.asistencia); if(b) porBucket[b.key]++; });
+  const tasaAusentismo = total ? ((porBucket.F / total) * 100).toFixed(1) : "0.0";
+
+  const porFecha = {};
+  conCodigo.forEach(r => { (porFecha[r.fecha] ||= {A:0,V:0,F:0,FJ:0,total:0}); const b = bucketOf(r.asistencia); if(b){ porFecha[r.fecha][b.key]++; porFecha[r.fecha].total++; } });
+  const fechas = Object.keys(porFecha).sort();
+
+  const porArea = {};
+  conCodigo.forEach(r => { const a = r.area || "N/A"; (porArea[a] ||= {A:0,V:0,F:0,FJ:0,total:0}); const b = bucketOf(r.asistencia); if(b){ porArea[a][b.key]++; porArea[a].total++; } });
+  const areasSorted = Object.entries(porArea).sort((a,b) => (b[1].F/b[1].total) - (a[1].F/a[1].total));
+
+  panel.innerHTML = `
+    <div class="kpi-grid">
+      ${kpiTile("Tasa de ausentismo", tasaAusentismo+"%", "Faltas / registros con código", "#FF3B4E")}
+      ${kpiTile("Asistencia", porBucket.A, "código A", "#22C55E")}
+      ${kpiTile("Faltas", porBucket.F, "código F", "#FF3B4E")}
+      ${kpiTile("Faltas justificadas", porBucket.FJ, "AM/DF/DM/DT/FRD/LCGH/LSGH/P/S", "#F5A623")}
+      ${kpiTile("Vacaciones", porBucket.V, "código V", "#A78BFA")}
+    </div>
+    <div class="grid-2">
+      <div class="card"><h3>Ausentismo diario</h3><p class="hint">% de faltas por día en el rango seleccionado.</p>
+        <div class="chart-box"><canvas id="ch-ausent-diario"></canvas></div></div>
+      <div class="card"><h3>Distribución</h3><p class="hint">Asistencia / Vacaciones / Faltas / F.J.</p>
+        <div class="chart-box"><canvas id="ch-ausent-dona"></canvas></div></div>
+    </div>
+    <div class="card"><h3>Tasa de faltas por área</h3><p class="hint">Ordenado de mayor a menor.</p>
+      <div class="chart-box tall"><canvas id="ch-ausent-area"></canvas></div></div>
+  `;
+
+  destroyChart("ausentDiario"); destroyChart("ausentDona"); destroyChart("ausentArea");
+  const darkGrid = { color:"#232733" }; const darkTicks = { color:"#7C8496" };
+
+  charts.ausentDiario = new Chart(document.getElementById("ch-ausent-diario"), {
+    type:"line",
+    data:{ labels: fechas.map(fmtFecha), datasets:[{
+      label:"% faltas", data: fechas.map(f => (porFecha[f].F/porFecha[f].total*100).toFixed(1)),
+      borderColor:"#FF3B4E", backgroundColor:"rgba(255,59,78,.12)", fill:true, tension:.3,
+    }]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ x:{grid:darkGrid,ticks:darkTicks}, y:{grid:darkGrid,ticks:darkTicks,beginAtZero:true} } }
+  });
+  charts.ausentDona = new Chart(document.getElementById("ch-ausent-dona"), {
+    type:"doughnut",
+    data:{ labels: ASIS_BUCKETS.map(b=>b.label), datasets:[{ data: ASIS_BUCKETS.map(b=>porBucket[b.key]), backgroundColor: ASIS_BUCKETS.map(b=>b.color), borderWidth:0 }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom",labels:{color:"#AEB4C2",boxWidth:10,font:{size:11}}}} }
+  });
+  charts.ausentArea = new Chart(document.getElementById("ch-ausent-area"), {
+    type:"bar",
+    data:{ labels: areasSorted.map(a=>a[0]), datasets:[{
+      label:"% faltas", data: areasSorted.map(a => (a[1].F/a[1].total*100).toFixed(1)), backgroundColor:"#FF3B4E", borderRadius:4,
+    }]},
+    options:{ indexAxis:"y", responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ x:{grid:darkGrid,ticks:darkTicks,beginAtZero:true}, y:{grid:{display:false},ticks:darkTicks} } }
+  });
+}
+
+/* ================= TAB: Rotación ================= */
+async function renderRotacion(){
+  const panel = document.getElementById("panel-rotacion");
+  panel.innerHTML = `<div class="loading">Cargando…</div>`;
+  let censo;
+  try{ censo = await rpc("asis_censo", { p_desde: filtros.desde, p_hasta: filtros.hasta, p_area: filtros.area || null }); }
+  catch(e){ panel.innerHTML = `<div class="loading">Error: ${humanError(e)}</div>`; return; }
+
+  const porDni = {};
+  censo.forEach(r => { porDni[r.dni] ||= r; });
+  const roster = Object.values(porDni);
+
+  const altas = roster.filter(r => r.f_ingreso && r.f_ingreso >= filtros.desde && r.f_ingreso <= filtros.hasta);
+  const bajas = roster.filter(r => r.f_cese && r.f_cese >= filtros.desde && r.f_cese <= filtros.hasta);
+  const activosPromedio = roster.filter(r => r.estado === "ACTIVO").length || 1;
+  const tasaRotacion = ((bajas.length / activosPromedio) * 100).toFixed(1);
+
+  const porFechaAlta = {}; altas.forEach(r => { porFechaAlta[r.f_ingreso] = (porFechaAlta[r.f_ingreso]||0)+1; });
+  const porFechaBaja = {}; bajas.forEach(r => { porFechaBaja[r.f_cese] = (porFechaBaja[r.f_cese]||0)+1; });
+  const fechasAll = [...new Set([...Object.keys(porFechaAlta), ...Object.keys(porFechaBaja)])].sort();
+
+  const motivos = {}; bajas.forEach(r => { const m = r.motivo_cese || "Sin especificar"; motivos[m] = (motivos[m]||0)+1; });
+
+  panel.innerHTML = `
+    <div class="kpi-grid">
+      ${kpiTile("Altas", altas.length, "ingresos en el período", "#22C55E")}
+      ${kpiTile("Bajas", bajas.length, "ceses en el período", "#FF3B4E")}
+      ${kpiTile("Tasa de rotación", tasaRotacion+"%", "bajas / dotación activa", "#F5A623")}
+      ${kpiTile("Dotación activa", activosPromedio, filtros.area || "todas las áreas", "#3B82F6")}
+    </div>
+    <div class="card"><h3>Altas vs. Bajas por fecha</h3>
+      <div class="chart-box tall"><canvas id="ch-rot-linea"></canvas></div></div>
+    <div class="grid-2">
+      <div class="card"><h3>Bajas por motivo</h3>
+        <div class="table-scroll"><table><thead><tr><th>Motivo</th><th class="num">Cantidad</th></tr></thead>
+        <tbody>${Object.entries(motivos).sort((a,b)=>b[1]-a[1]).map(([m,c])=>`<tr><td>${m}</td><td class="num">${c}</td></tr>`).join("") || '<tr><td colspan="2" class="hint">Sin bajas en el período.</td></tr>'}</tbody></table></div>
+      </div>
+      <div class="card"><h3>Detalle de bajas</h3>
+        <div class="table-scroll"><table><thead><tr><th>DNI</th><th>Nombre</th><th>Área</th><th>Fecha cese</th><th>Motivo</th></tr></thead>
+        <tbody>${bajas.map(r=>`<tr><td>${r.dni}</td><td>${r.nombre}</td><td>${r.area||"—"}</td><td>${fmtFecha(r.f_cese)}</td><td>${r.motivo_cese||"—"}</td></tr>`).join("") || '<tr><td colspan="5" class="hint">Sin bajas en el período.</td></tr>'}</tbody></table></div>
+      </div>
+    </div>
+  `;
+
+  destroyChart("rotLinea");
+  const darkGrid = { color:"#232733" }; const darkTicks = { color:"#7C8496" };
+  charts.rotLinea = new Chart(document.getElementById("ch-rot-linea"), {
+    type:"bar",
+    data:{ labels: fechasAll.map(fmtFecha), datasets:[
+      { label:"Altas", data: fechasAll.map(f=>porFechaAlta[f]||0), backgroundColor:"#22C55E", borderRadius:4 },
+      { label:"Bajas", data: fechasAll.map(f=>porFechaBaja[f]||0), backgroundColor:"#FF3B4E", borderRadius:4 },
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{labels:{color:"#AEB4C2"}}},
+      scales:{ x:{grid:darkGrid,ticks:darkTicks}, y:{grid:darkGrid,ticks:darkTicks,beginAtZero:true} } }
+  });
+}
+
+/* ================= TAB: Asistencia General ================= */
+async function renderGeneral(){
+  const panel = document.getElementById("panel-general");
+  panel.innerHTML = `<div class="loading">Cargando…</div>`;
+  let marcas;
+  try{ marcas = await rpc("asis_reporte", { p_desde: filtros.desde, p_hasta: filtros.hasta, p_area: filtros.area || null }); }
+  catch(e){ panel.innerHTML = `<div class="loading">Error: ${humanError(e)}</div>`; return; }
+
+  const ingresos = marcas.filter(m => m.tipo === "ingreso");
+  let aTiempo = 0, tarde = 0, minutosTardeTotal = 0;
+  const porArea = {};
+  ingresos.forEach(m => {
+    const inicio = TURNO_INICIO[(m.turno||"").trim().toUpperCase()];
+    const area = m.area || "N/A";
+    (porArea[area] ||= { aTiempo:0, tarde:0 });
+    if(inicio && fmtHora(m.registrado_en) > inicio){
+      tarde++; porArea[area].tarde++;
+      const [hh,mm] = fmtHora(m.registrado_en).split(":").map(Number);
+      const [ih,im] = inicio.split(":").map(Number);
+      minutosTardeTotal += Math.max(0, (hh*60+mm) - (ih*60+im));
+    }else{
+      aTiempo++; porArea[area].aTiempo++;
+    }
+  });
+
+  // Horas trabajadas aproximadas: ingreso -> salida por dni+fecha.
+  const porDniFecha = {};
+  marcas.forEach(m => { const k = m.dni+"|"+m.fecha; (porDniFecha[k] ||= {}); porDniFecha[k][m.tipo] = m.registrado_en; });
+  let totalHoras = 0, jornadasCompletas = 0;
+  Object.values(porDniFecha).forEach(d => {
+    if(d.ingreso && d.salida){
+      const horas = (new Date(d.salida) - new Date(d.ingreso)) / 3600000;
+      if(horas > 0 && horas < 20){ totalHoras += horas; jornadasCompletas++; }
+    }
+  });
+  const promedioHoras = jornadasCompletas ? (totalHoras/jornadasCompletas).toFixed(1) : "0.0";
+
+  const areasSorted = Object.entries(porArea).sort((a,b) => (b[1].tarde) - (a[1].tarde));
+
+  panel.innerHTML = `
+    <div class="kpi-grid">
+      ${kpiTile("Puntualidad", ingresos.length ? Math.round(aTiempo/ingresos.length*100)+"%" : "—", "ingresos a tiempo", "#22C55E")}
+      ${kpiTile("Tardanzas", tarde, "ingresos fuera de ventana", "#FF3B4E")}
+      ${kpiTile("Min. tarde (prom.)", tarde ? Math.round(minutosTardeTotal/tarde) : 0, "por tardanza", "#F5A623")}
+      ${kpiTile("Horas/jornada (prom.)", promedioHoras, jornadasCompletas+" jornadas completas", "#3B82F6")}
+    </div>
+    <div class="grid-2">
+      <div class="card"><h3>Puntualidad por área</h3><p class="hint">A tiempo vs. tardanzas.</p>
+        <div class="chart-box tall"><canvas id="ch-gen-area"></canvas></div></div>
+      <div class="card"><h3>Marcaciones por tipo</h3>
+        <div class="chart-box"><canvas id="ch-gen-tipo"></canvas></div></div>
+    </div>
+  `;
+
+  destroyChart("genArea"); destroyChart("genTipo");
+  const darkGrid = { color:"#232733" }; const darkTicks = { color:"#7C8496" };
+  charts.genArea = new Chart(document.getElementById("ch-gen-area"), {
+    type:"bar",
+    data:{ labels: areasSorted.map(a=>a[0]), datasets:[
+      { label:"A tiempo", data: areasSorted.map(a=>a[1].aTiempo), backgroundColor:"#22C55E", borderRadius:4 },
+      { label:"Tardanza", data: areasSorted.map(a=>a[1].tarde), backgroundColor:"#FF3B4E", borderRadius:4 },
+    ]},
+    options:{ indexAxis:"y", responsive:true, maintainAspectRatio:false, plugins:{legend:{labels:{color:"#AEB4C2"}}},
+      scales:{ x:{grid:darkGrid,ticks:darkTicks,stacked:true,beginAtZero:true}, y:{grid:{display:false},ticks:darkTicks,stacked:true} } }
+  });
+  const porTipo = {}; marcas.forEach(m => porTipo[m.tipo] = (porTipo[m.tipo]||0)+1);
+  charts.genTipo = new Chart(document.getElementById("ch-gen-tipo"), {
+    type:"doughnut",
+    data:{ labels: Object.keys(porTipo).map(t=>TIPO_LABEL[t]||t), datasets:[{ data: Object.values(porTipo), backgroundColor:["#22C55E","#F5A623","#F5A623","#FF3B4E"], borderWidth:0 }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom",labels:{color:"#AEB4C2",boxWidth:10,font:{size:11}}}} }
+  });
+}
+
+/* ================= TAB: Pagos ================= */
+async function renderPagos(){
+  const panel = document.getElementById("panel-pagos");
+  if(!["admin","rrhh"].includes(session.rol)){
+    panel.innerHTML = `<div class="banner">Tu rol (${ROLE_LABELS[session.rol]||session.rol}) no tiene acceso a información de sueldos. Solo Administración y Gestión Humana pueden ver esta pestaña.</div>`;
+    return;
+  }
+  panel.innerHTML = `<div class="loading">Cargando…</div>`;
+  let sueldos;
+  try{ sueldos = await rpc("asis_sueldos_listar", {}); }
+  catch(e){ panel.innerHTML = `<div class="loading">Error: ${humanError(e)}</div>`; return; }
+
+  const sinSueldo = sueldos.filter(s => s.sueldo_mensual == null).length;
+
+  panel.innerHTML = `
+    ${sinSueldo ? `<div class="banner">${sinSueldo} colaborador(es) activo(s) sin sueldo registrado — no aparecerán en el cálculo de planilla hasta que les asignes uno.</div>` : ""}
+    <div class="grid-2">
+      <div class="card">
+        <h3>Sueldos base</h3><p class="hint">Se usa para calcular descuentos por falta y tardanza. Enter o el botón guarda.</p>
+        <div class="table-scroll" style="max-height:480px;">
+          <table><thead><tr><th>DNI</th><th>Nombre</th><th>Área</th><th class="num">Sueldo mensual</th><th></th></tr></thead>
+          <tbody id="tbl-sueldos">
+          ${sueldos.map(s => `
+            <tr data-dni="${s.dni}">
+              <td>${s.dni}</td><td>${s.nombre}</td><td>${s.area||"—"}</td>
+              <td class="num"><input class="sueldo-input" type="number" step="0.01" min="0" value="${s.sueldo_mensual ?? ''}" placeholder="—"></td>
+              <td><button class="btn-sm primary btn-guardar-sueldo">Guardar</button></td>
+            </tr>`).join("")}
+          </tbody></table>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Calcular planilla del período</h3>
+        <p class="hint">Usa el rango de fechas del filtro superior (${fmtFecha(filtros.desde)} → ${fmtFecha(filtros.hasta)}). Faltas no justificadas descuentan día completo; tardanzas descuentan proporcional a los minutos.</p>
+        <button class="btn-sm primary" id="btn-calcular-planilla">Calcular planilla</button>
+        <button class="btn-sm" id="btn-exportar-planilla" style="margin-left:8px;" hidden>Exportar a Excel</button>
+        <div id="planilla-resultado" style="margin-top:16px;"></div>
+      </div>
+    </div>
+  `;
+
+  document.querySelectorAll(".btn-guardar-sueldo").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const tr = btn.closest("tr");
+      const dni = tr.dataset.dni;
+      const valor = parseFloat(tr.querySelector(".sueldo-input").value);
+      if(isNaN(valor) || valor < 0){ alert("Ingresa un sueldo válido."); return; }
+      btn.disabled = true; btn.textContent = "…";
+      try{ await rpc("asis_sueldos_guardar", { p_dni: dni, p_sueldo_mensual: valor }); btn.textContent = "✓"; }
+      catch(e){ alert(humanError(e)); btn.textContent = "Guardar"; }
+      setTimeout(() => { btn.disabled = false; if(btn.textContent==="✓") btn.textContent = "Guardar"; }, 1200);
+    });
+  });
+
+  let ultimaPlanilla = [];
+  document.getElementById("btn-calcular-planilla").addEventListener("click", async () => {
+    const cont = document.getElementById("planilla-resultado");
+    cont.innerHTML = `<div class="loading">Calculando…</div>`;
+    try{
+      ultimaPlanilla = await rpc("asis_planilla_calcular", { p_desde: filtros.desde, p_hasta: filtros.hasta, p_area: filtros.area || null });
+    }catch(e){ cont.innerHTML = `<div class="loading">Error: ${humanError(e)}</div>`; return; }
+
+    if(!ultimaPlanilla.length){
+      cont.innerHTML = `<div class="hint">Nadie en este rango tiene sueldo registrado todavía.</div>`;
+      document.getElementById("btn-exportar-planilla").hidden = true;
+      return;
+    }
+    const totalNeto = ultimaPlanilla.reduce((s,r) => s + Number(r.sueldo_neto), 0);
+    const totalDescuentos = ultimaPlanilla.reduce((s,r) => s + Number(r.deduccion_faltas) + Number(r.deduccion_tardanzas), 0);
+    cont.innerHTML = `
+      <div class="kpi-grid" style="margin-bottom:14px;">
+        ${kpiTile("Colaboradores", ultimaPlanilla.length, "", "#3B82F6")}
+        ${kpiTile("Total descuentos", money(totalDescuentos), "faltas + tardanzas", "#FF3B4E")}
+        ${kpiTile("Total a pagar", money(totalNeto), "sueldo neto", "#22C55E")}
+      </div>
+      <div class="table-scroll" style="max-height:420px;">
+        <table><thead><tr><th>DNI</th><th>Nombre</th><th>Área</th><th class="num">Sueldo</th><th class="num">Días falta</th>
+        <th class="num">Desc. faltas</th><th class="num">Min. tarde</th><th class="num">Desc. tardanza</th><th class="num">Neto</th></tr></thead>
+        <tbody>${ultimaPlanilla.map(r => `<tr><td>${r.dni}</td><td>${r.nombre}</td><td>${r.area||"—"}</td>
+          <td class="num">${money(r.sueldo_mensual)}</td><td class="num">${r.dias_falta}</td>
+          <td class="num">${money(r.deduccion_faltas)}</td><td class="num">${r.minutos_tardanza}</td>
+          <td class="num">${money(r.deduccion_tardanzas)}</td><td class="num" style="color:#22C55E;font-weight:700;">${money(r.sueldo_neto)}</td></tr>`).join("")}
+        </tbody></table>
+      </div>
+    `;
+    document.getElementById("btn-exportar-planilla").hidden = false;
+  });
+
+  document.getElementById("btn-exportar-planilla").addEventListener("click", () => {
+    if(!ultimaPlanilla.length) return;
+    const rows = ultimaPlanilla.map(r => ({
+      DNI: r.dni, Nombre: r.nombre, Área: r.area, "Sueldo mensual": r.sueldo_mensual,
+      "Días falta": r.dias_falta, "Descuento faltas": r.deduccion_faltas,
+      "Minutos tardanza": r.minutos_tardanza, "Descuento tardanza": r.deduccion_tardanzas,
+      "Sueldo neto": r.sueldo_neto,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Planilla");
+    XLSX.writeFile(wb, `planilla_${filtros.desde}_a_${filtros.hasta}.xlsx`);
+  });
+}
+
+/* ================= Arranque ================= */
+async function iniciarApp(){
+  document.getElementById("login-screen").style.display = "none";
+  document.getElementById("app").classList.add("show");
+  document.getElementById("user-nombre").textContent = session.nombre || session.username || "—";
+  document.getElementById("user-rol").textContent = ROLE_LABELS[session.rol] || session.rol || "—";
+  await cargarAreas();
+  renderTabActivo();
+}
+
+(async function main(){
+  if(await intentarSesionGuardada()) await iniciarApp();
+})();
+</script>
+</body>
+</html>
