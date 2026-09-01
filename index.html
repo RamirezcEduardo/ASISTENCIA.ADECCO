@@ -1083,20 +1083,95 @@ document.getElementById("tabla-body").addEventListener("contextmenu", async (e)=
   cargarReporte();
 });
 
-document.getElementById("export-btn").addEventListener("click", ()=>{
-  const grupos = agruparPorColaboradorDia(ultimoReporte);
-  const rows = grupos.map(g=>{
-    const { horas, esperadas, deficit, cumplio } = estadoHoras(g);
+/* ---- Export a Excel con el formato de encabezados de RR.HH. ---- */
+function partesFecha(fechaStr){
+  if(!fechaStr) return null;
+  const [y,m,d] = fechaStr.split("-").map(Number);
+  return { y, m, d, date: new Date(Date.UTC(y, m-1, d)) };
+}
+function fmtFechaCorta(fechaStr){
+  const p = partesFecha(fechaStr);
+  if(!p) return "";
+  return String(p.d).padStart(2,"0") + "/" + String(p.m).padStart(2,"0") + "/" + p.y;
+}
+const DIAS_SEMANA = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
+function nombreDiaSemana(fechaStr){
+  const p = partesFecha(fechaStr);
+  return p ? DIAS_SEMANA[p.date.getUTCDay()] : "";
+}
+function numeroSemana(fechaStr){
+  const p = partesFecha(fechaStr);
+  if(!p) return "";
+  const inicioAnio = new Date(Date.UTC(p.y, 0, 1));
+  const dias = Math.floor((p.date - inicioAnio) / 86400000);
+  return Math.ceil((dias + inicioAnio.getUTCDay() + 1) / 7);
+}
+function horasDesdeRrhh(r){
+  const esperadas = HORAS_ESPERADAS_POR_TURNO[(r.turno || "").trim().toUpperCase()] ?? HORAS_ESPERADAS_DEFAULT;
+  if(!r.ingreso || !r.salida) return { horas: null, esperadas, deficit: null, cumplio: false };
+  let ms = new Date(r.salida) - new Date(r.ingreso);
+  if(r.almuerzo_inicio && r.almuerzo_fin) ms -= (new Date(r.almuerzo_fin) - new Date(r.almuerzo_inicio));
+  if(ms <= 0) return { horas: null, esperadas, deficit: null, cumplio: false };
+  const horas = ms / 3600000;
+  const deficit = Math.max(0, esperadas - horas);
+  return { horas, esperadas, deficit, cumplio: deficit < 0.05 };
+}
+
+document.getElementById("export-btn").addEventListener("click", async ()=>{
+  const btn = document.getElementById("export-btn");
+  const desde = document.getElementById("filtro-desde").value || todayISO();
+  const hasta = document.getElementById("filtro-hasta").value || todayISO();
+  const area = document.getElementById("filtro-area").value;
+  btn.disabled = true;
+  btn.textContent = "Generando...";
+  const { data, error } = await sb.rpc("asis_reporte_rrhh", { p_token: currentSession.token, p_desde: desde, p_hasta: hasta, p_area: area || null });
+  btn.disabled = false;
+  btn.textContent = "Exportar Excel";
+  if(error){ alert(humanError(error)); return; }
+
+  const hoyCorta = fmtFechaCorta(todayISO());
+  const rows = (data || []).map(r=>{
+    const { horas, esperadas, deficit, cumplio } = horasDesdeRrhh(r);
     return {
-      DNI: g.dni, Colaborador: g.nombre, Área: g.area || "", Turno: g.turno || "", Fecha: g.fecha,
-      Ingreso: g.marcas.ingreso ? fmtHora(g.marcas.ingreso.registrado_en) : "",
-      "Inicio Almuerzo": g.marcas.almuerzo_inicio ? fmtHora(g.marcas.almuerzo_inicio.registrado_en) : "",
-      "Fin Almuerzo": g.marcas.almuerzo_fin ? fmtHora(g.marcas.almuerzo_fin.registrado_en) : "",
-      Salida: g.marcas.salida ? fmtHora(g.marcas.salida.registrado_en) : "",
-      "Horas esperadas": esperadas,
-      "Horas trabajadas": horas === null ? "" : horas.toFixed(1),
-      "Horas que debe": horas === null ? "" : (cumplio ? 0 : deficit.toFixed(1)),
-      Estado: horas === null ? "Incompleto" : (cumplio ? "Cumplió" : "No cumplió"),
+      "DNI": r.dni,
+      "APELLIDOS Y NOMBRES": r.nombre,
+      "ESTADO": r.estado || "",
+      "MOTIVO DE CESE": r.motivo_cese || "",
+      "FECHA INGRESO": fmtFechaCorta(r.f_ingreso),
+      "FECHA CESE": fmtFechaCorta(r.f_cese),
+      "ACTIVO": r.estado ? (r.estado === "ACTIVO" ? "SI" : "NO") : "",
+      "PUESTO EN CONTRATO": r.puesto || "",
+      "AREA": r.area || "",
+      "TURNOS": r.turno || "",
+      "FECHA": fmtFechaCorta(r.fecha),
+      "DIA": partesFecha(r.fecha)?.d ?? "",
+      "MES": partesFecha(r.fecha)?.m ?? "",
+      "AÑO": partesFecha(r.fecha)?.y ?? "",
+      "ASISTENCIA": r.asistencia || (r.ingreso ? "A" : "F"),
+      "SUPERVISOR": r.supervisor || "",
+      "Mes Ingreso": partesFecha(r.f_ingreso)?.m ?? "",
+      "Año de ingreso": partesFecha(r.f_ingreso)?.y ?? "",
+      "Mes Cese": partesFecha(r.f_cese)?.m ?? "",
+      "Año de Cese": partesFecha(r.f_cese)?.y ?? "",
+      "Dia2": nombreDiaSemana(r.fecha),
+      "TYPE": "",
+      "Mes Registro": partesFecha(r.fecha)?.m ?? "",
+      "Semana Asistencia": numeroSemana(r.fecha),
+      "Semana Ingreso": numeroSemana(r.f_ingreso),
+      "Semana Cese": numeroSemana(r.f_cese),
+      "HOY": hoyCorta,
+      "Antigüedad (Dias) ": r.antiguedad_dias ?? "",
+      "Antigüedad (Sem) ": r.antiguedad_semanas ?? "",
+      "Estado de Antigüedad": r.estado_antiguedad || "",
+      "SEXO": r.sexo || "",
+      "INGRESO": r.ingreso ? fmtHora(r.ingreso) : "",
+      "INICIO ALMUERZO": r.almuerzo_inicio ? fmtHora(r.almuerzo_inicio) : "",
+      "FIN ALMUERZO": r.almuerzo_fin ? fmtHora(r.almuerzo_fin) : "",
+      "SALIDA": r.salida ? fmtHora(r.salida) : "",
+      "HORAS ESPERADAS": esperadas,
+      "HORAS TRABAJADAS": horas === null ? "" : horas.toFixed(1),
+      "HORAS QUE DEBE": horas === null ? "" : (cumplio ? 0 : deficit.toFixed(1)),
+      "ESTADO JORNADA": horas === null ? "Incompleto" : (cumplio ? "Cumplió" : "No cumplió"),
     };
   });
   const ws = XLSX.utils.json_to_sheet(rows);
