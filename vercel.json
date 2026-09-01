@@ -1,5 +1,6 @@
 {
-  "rewrites": [
-    { "source": "/", "destination": "/centro-control.html" }
+  "routes": [
+    { "src": "^/$", "dest": "/centro-control.html" },
+    { "handle": "filesystem" }
   ]
 }
