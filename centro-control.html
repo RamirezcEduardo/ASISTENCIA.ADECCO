@@ -210,6 +210,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 const SUPABASE_URL = "https://zlukrktpjffiycarpduc.supabase.co";
@@ -329,6 +330,19 @@ async function cargarAreas(){
 /* ================= Tabs ================= */
 const charts = {};
 function destroyChart(key){ if(charts[key]){ charts[key].destroy(); delete charts[key]; } }
+
+/* Etiquetas de datos siempre visibles (no solo al pasar el mouse) --
+   pedido explicito: las graficas deben leerse de un vistazo. Oculta
+   los ceros para no ensuciar barras/dona sin datos en esa categoria. */
+Chart.register(ChartDataLabels);
+Chart.defaults.set("plugins.datalabels", {
+  color: "#fff",
+  font: { weight: "700", size: 10.5 },
+  display: (ctx) => {
+    const v = ctx.dataset.data[ctx.dataIndex];
+    return v !== 0 && v !== null && v !== undefined && v !== "0.0";
+  },
+});
 
 let tabActivo = "vivo";
 document.querySelectorAll("#tabs button").forEach(btn => {
@@ -504,20 +518,23 @@ async function renderAusentismo(){
       label:"% faltas", data: fechas.map(f => (porFecha[f].F/porFecha[f].total*100).toFixed(1)),
       borderColor:"#FF3B4E", backgroundColor:"rgba(255,59,78,.12)", fill:true, tension:.3,
     }]},
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},
+      datalabels:{ color:"#FF8A93", anchor:"end", align:"top", clamp:true, formatter:v=>v+"%" } },
       scales:{ x:{grid:darkGrid,ticks:darkTicks}, y:{grid:darkGrid,ticks:darkTicks,beginAtZero:true} } }
   });
   charts.ausentDona = new Chart(document.getElementById("ch-ausent-dona"), {
     type:"doughnut",
     data:{ labels: ASIS_BUCKETS.map(b=>b.label), datasets:[{ data: ASIS_BUCKETS.map(b=>porBucket[b.key]), backgroundColor: ASIS_BUCKETS.map(b=>b.color), borderWidth:0 }] },
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom",labels:{color:"#AEB4C2",boxWidth:10,font:{size:11}}}} }
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom",labels:{color:"#AEB4C2",boxWidth:10,font:{size:11}}},
+      datalabels:{ formatter:(v,ctx)=>{ const t=ctx.dataset.data.reduce((a,b)=>a+b,0); return v+" ("+(t?Math.round(v/t*100):0)+"%)"; } } } }
   });
   charts.ausentArea = new Chart(document.getElementById("ch-ausent-area"), {
     type:"bar",
     data:{ labels: areasSorted.map(a=>a[0]), datasets:[{
       label:"% faltas", data: areasSorted.map(a => (a[1].F/a[1].total*100).toFixed(1)), backgroundColor:"#FF3B4E", borderRadius:4,
     }]},
-    options:{ indexAxis:"y", responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+    options:{ indexAxis:"y", responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},
+      datalabels:{ color:"#fff", anchor:"center", align:"center", formatter:v=>v+"%" } },
       scales:{ x:{grid:darkGrid,ticks:darkTicks,beginAtZero:true}, y:{grid:{display:false},ticks:darkTicks} } }
   });
 }
@@ -574,7 +591,8 @@ async function renderRotacion(){
       { label:"Altas", data: fechasAll.map(f=>porFechaAlta[f]||0), backgroundColor:"#22C55E", borderRadius:4 },
       { label:"Bajas", data: fechasAll.map(f=>porFechaBaja[f]||0), backgroundColor:"#FF3B4E", borderRadius:4 },
     ]},
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{labels:{color:"#AEB4C2"}}},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{labels:{color:"#AEB4C2"}},
+      datalabels:{ color:"#fff", anchor:"end", align:"top", clamp:true } },
       scales:{ x:{grid:darkGrid,ticks:darkTicks}, y:{grid:darkGrid,ticks:darkTicks,beginAtZero:true} } }
   });
 }
@@ -641,14 +659,17 @@ async function renderGeneral(){
       { label:"A tiempo", data: areasSorted.map(a=>a[1].aTiempo), backgroundColor:"#22C55E", borderRadius:4 },
       { label:"Tardanza", data: areasSorted.map(a=>a[1].tarde), backgroundColor:"#FF3B4E", borderRadius:4 },
     ]},
-    options:{ indexAxis:"y", responsive:true, maintainAspectRatio:false, plugins:{legend:{labels:{color:"#AEB4C2"}}},
+    options:{ indexAxis:"y", responsive:true, maintainAspectRatio:false, plugins:{legend:{labels:{color:"#AEB4C2"}},
+      datalabels:{ color:"#fff", anchor:"center", align:"center" } },
       scales:{ x:{grid:darkGrid,ticks:darkTicks,stacked:true,beginAtZero:true}, y:{grid:{display:false},ticks:darkTicks,stacked:true} } }
   });
+  const TIPO_COLOR = { ingreso:"#22C55E", almuerzo_inicio:"#F5A623", almuerzo_fin:"#F5A623", salida:"#FF3B4E" };
   const porTipo = {}; marcas.forEach(m => porTipo[m.tipo] = (porTipo[m.tipo]||0)+1);
   charts.genTipo = new Chart(document.getElementById("ch-gen-tipo"), {
     type:"doughnut",
-    data:{ labels: Object.keys(porTipo).map(t=>TIPO_LABEL[t]||t), datasets:[{ data: Object.values(porTipo), backgroundColor:["#22C55E","#F5A623","#F5A623","#FF3B4E"], borderWidth:0 }] },
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom",labels:{color:"#AEB4C2",boxWidth:10,font:{size:11}}}} }
+    data:{ labels: Object.keys(porTipo).map(t=>TIPO_LABEL[t]||t), datasets:[{ data: Object.values(porTipo), backgroundColor: Object.keys(porTipo).map(t=>TIPO_COLOR[t]||"#7C8496"), borderWidth:0 }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom",labels:{color:"#AEB4C2",boxWidth:10,font:{size:11}}},
+      datalabels:{ formatter:(v,ctx)=>{ const t=ctx.dataset.data.reduce((a,b)=>a+b,0); return v+" ("+(t?Math.round(v/t*100):0)+"%)"; } } } }
   });
 }
 
@@ -708,8 +729,22 @@ function pintarPersonalGrid(){
       <div class="nombre">${p.nombre}</div>
       <div class="meta">${p.dni} · ${[p.area, p.turno].filter(Boolean).join(" · ")}</div>
       <span class="estado-pill ${p.enrolado ? 'ok' : 'pend'}">${p.enrolado ? '✅ Enrolado' : '⏳ Pendiente'}</span>
+      ${p.enrolado ? `<button class="btn-sm" style="margin-top:10px;width:100%;" data-dni="${p.dni.replace(/"/g,'&quot;')}" data-nombre="${p.nombre.replace(/"/g,'&quot;')}" onclick="eliminarRostroPersonal(this)">🗑️ Quitar y re-enrolar</button>` : ""}
     </div>
   `).join("");
+}
+
+async function eliminarRostroPersonal(btn){
+  const dni = btn.dataset.dni, nombre = btn.dataset.nombre;
+  if(!confirm(`¿Quitar el rostro enrolado de ${nombre}? Va a tener que volver a enrolarse en el kiosco.`)) return;
+  btn.disabled = true; btn.textContent = "Quitando…";
+  try{
+    await rpc("asis_rostros_eliminar", { p_dni: dni });
+    await renderPersonal();
+  }catch(e){
+    alert(humanError(e));
+    btn.disabled = false; btn.textContent = "🗑️ Quitar y re-enrolar";
+  }
 }
 
 /* ================= TAB: Pagos ================= */
