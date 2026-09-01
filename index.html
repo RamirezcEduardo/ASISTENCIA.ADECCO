@@ -1094,10 +1094,17 @@ function fmtFechaCorta(fechaStr){
   if(!p) return "";
   return String(p.d).padStart(2,"0") + "/" + String(p.m).padStart(2,"0") + "/" + p.y;
 }
-const DIAS_SEMANA = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
-function nombreDiaSemana(fechaStr){
+/* Dia2 = TEXTO(FECHA;"ddd") y "Mes Registro" = TEXTO(FECHA;"MMM") en la
+   plantilla original de RR.HH. — abreviaturas de 3 letras en español. */
+const DIAS_ABREV = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+const MESES_ABREV = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+function diaAbreviado(fechaStr){
   const p = partesFecha(fechaStr);
-  return p ? DIAS_SEMANA[p.date.getUTCDay()] : "";
+  return p ? DIAS_ABREV[p.date.getUTCDay()] : "";
+}
+function mesAbreviado(fechaStr){
+  const p = partesFecha(fechaStr);
+  return p ? MESES_ABREV[p.m - 1] : "";
 }
 function numeroSemana(fechaStr){
   const p = partesFecha(fechaStr);
@@ -1153,9 +1160,9 @@ document.getElementById("export-btn").addEventListener("click", async ()=>{
       "Año de ingreso": partesFecha(r.f_ingreso)?.y ?? "",
       "Mes Cese": partesFecha(r.f_cese)?.m ?? "",
       "Año de Cese": partesFecha(r.f_cese)?.y ?? "",
-      "Dia2": nombreDiaSemana(r.fecha),
-      "TYPE": "",
-      "Mes Registro": partesFecha(r.fecha)?.m ?? "",
+      "Dia2": diaAbreviado(r.fecha),
+      "TYPE": r.f_ingreso === r.fecha ? "NUEVO" : (r.f_cese === r.fecha ? "EX" : ""),
+      "Mes Registro": mesAbreviado(r.fecha),
       "Semana Asistencia": numeroSemana(r.fecha),
       "Semana Ingreso": numeroSemana(r.f_ingreso),
       "Semana Cese": numeroSemana(r.f_cese),
