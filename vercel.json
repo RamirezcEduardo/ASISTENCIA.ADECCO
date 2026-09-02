@@ -1,0 +1,6 @@
+{
+  "routes": [
+    { "src": "^/$", "dest": "/centro-control.html" },
+    { "handle": "filesystem" }
+  ]
+}

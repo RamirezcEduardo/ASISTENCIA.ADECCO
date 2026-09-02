@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - "mobile/**"
-      - "index.html"
+      - "kiosco-biometrico.html"
       - ".github/workflows/build-apk.yml"
   workflow_dispatch: {}
 
@@ -36,11 +36,14 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
 
-      # Copia la app web más reciente (raíz del repo) a mobile/www antes de empaquetar,
-      # así el APK siempre lleva el index.html actualizado sin duplicar el archivo a mano.
+      # El kiosco biometrico (raiz del repo) es la pantalla que se instala en la
+      # tablet -- se copia como index.html de la app movil. face-api.js y sus
+      # modelos se cargan desde CDN en tiempo de ejecucion (no se empaquetan):
+      # Android/Capacitor corrompe los shards binarios grandes servidos como
+      # asset local del WebView, y el kiosco ya requiere internet para Supabase.
       - name: Sincronizar app web con Capacitor
         run: |
-          cp ../index.html www/index.html
+          cp ../kiosco-biometrico.html www/index.html
           cp ../manifest.json www/manifest.json
           cp -r ../icons www/icons
           npx cap sync android
