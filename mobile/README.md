@@ -32,7 +32,25 @@ directo en el navegador — no plugins nativos de Capacitor. El
 `BridgeWebChromeClient` que trae Capacitor por defecto ya sabe pedir esos
 permisos en tiempo de ejecución; solo hacía falta declarar
 `android.permission.CAMERA`, `ACCESS_FINE_LOCATION` y `ACCESS_COARSE_LOCATION`
-en `AndroidManifest.xml` (ya está). No se tocó `MainActivity.java`.
+en `AndroidManifest.xml` (ya está).
+
+## Modo kiosko (no se puede salir sin clave)
+
+`MainActivity.java` hace dos cosas para que la tablet quede fija en la app:
+
+- **Se auto-fija en pantalla** (`startLockTask()` en `onResume`), sin que el
+  personal tenga que hacer el gesto manual de "Fijar" cada vez que se abre.
+  Con esto Android ya bloquea Inicio y Recientes por su cuenta.
+- **El botón Atrás pide clave** en vez de cerrar la app. La clave está fija en
+  el código (`CLAVE_SALIDA` en `MainActivity.java`, hoy `adecco2026`) — para
+  cambiarla hay que editar esa línea y volver a compilar el APK.
+
+Esto es independiente de (y se suma a) la función nativa de Android "Fijar
+pantalla" con PIN — ver la guía de configuración de la tablet. Si algún
+día la tablet queda pillada sin poder salir (clave olvidada), la única
+salida de emergencia es forzar el cierre de la app desde
+Ajustes → Apps → ADECCO Asistencia → Forzar detención (requiere el PIN de
+Android de la tablet, no el de la app).
 
 ## Firma de debug fija
 
