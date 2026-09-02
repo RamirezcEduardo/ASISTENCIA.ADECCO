@@ -153,6 +153,23 @@
   .estado-pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:700;}
   .estado-pill.ok{background:var(--green-dim);color:var(--green);}
   .estado-pill.pend{background:var(--amber-dim);color:var(--amber);}
+
+  /* ============ Modal alta/edicion/baja de personal ============ */
+  #personal-modal{position:fixed;inset:0;z-index:60;background:rgba(5,6,9,.65);display:none;align-items:center;justify-content:center;padding:16px;}
+  #personal-modal.show{display:flex;}
+  .personal-modal-card{width:min(94vw,460px);max-height:92vh;overflow:auto;background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:24px;box-shadow:var(--shadow);}
+  .personal-modal-card h3{margin:0 0 8px;font-size:16px;}
+  .personal-modal-card p.hint{margin:0 0 16px;font-size:12px;color:var(--muted);line-height:1.5;}
+  .personal-modal-card label{display:block;font-size:11px;color:var(--muted);margin:12px 0 5px;text-transform:uppercase;letter-spacing:.04em;}
+  .personal-modal-card input,.personal-modal-card select{width:100%;padding:10px 12px;border-radius:9px;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font-size:14px;}
+  .personal-modal-card input:focus,.personal-modal-card select:focus{outline:none;border-color:var(--red);}
+  .personal-modal-card input:disabled{opacity:.55;}
+  .pm-row-2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .pm-status{margin-top:12px;font-size:12.5px;font-weight:600;min-height:16px;}
+  .pm-status.bad{color:var(--red);}
+  .pm-status.ok{color:var(--green);}
+  .pm-actions{display:flex;gap:10px;margin-top:20px;}
+  .pm-actions button{flex:1;}
 </style>
 </head>
 <body>
@@ -208,6 +225,35 @@
   </main>
 </div>
 
+<div id="personal-modal">
+  <div class="personal-modal-card">
+    <h3 id="personal-modal-titulo">Agregar colaborador</h3>
+    <p class="hint">Corrige el registro de <strong>hoy</strong> en el censo. Si RR.HH. reimporta el Excel más tarde sin este mismo cambio, puede sobrescribirlo — para altas/bajas definitivas, avisa también al equipo de datos.</p>
+    <input type="hidden" id="pm-dni-original">
+    <label>DNI</label>
+    <input type="text" id="pm-dni" inputmode="numeric" maxlength="15">
+    <label>Nombre completo</label>
+    <input type="text" id="pm-nombre">
+    <div class="pm-row-2">
+      <div><label>Puesto</label><input type="text" id="pm-puesto"></div>
+      <div><label>Área</label><input type="text" id="pm-area"></div>
+    </div>
+    <div class="pm-row-2">
+      <div><label>Turno</label>
+        <select id="pm-turno"><option value="">—</option><option value="MAÑANA">Mañana</option><option value="TARDE">Tarde</option><option value="NOCHE">Noche</option></select>
+      </div>
+      <div><label>Estado</label>
+        <select id="pm-estado"><option value="ACTIVO">Activo</option><option value="CESADO">Cesado (dar de baja)</option></select>
+      </div>
+    </div>
+    <div class="pm-status" id="pm-status"></div>
+    <div class="pm-actions">
+      <button class="btn-sm" onclick="cerrarPersonalModal()">Cancelar</button>
+      <button class="btn-sm primary" id="pm-guardar" onclick="guardarPersonalModal()">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
@@ -245,7 +291,7 @@ function monthStartISO(){ const d = new Date(); return `${d.getFullYear()}-${Str
 function money(n){ return "S/ " + (Number(n)||0).toLocaleString("es-PE",{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function humanError(err){
   const code = (err && err.message) ? err.message.replace(/^.*?:\s*/,"").trim() : "";
-  const MSGS = { SIN_PERMISO:"No tienes permiso para esto.", DNI_NO_ENCONTRADO:"DNI no encontrado.", SUELDO_INVALIDO:"Sueldo inválido." };
+  const MSGS = { SIN_PERMISO:"No tienes permiso para esto.", DNI_NO_ENCONTRADO:"DNI no encontrado.", SUELDO_INVALIDO:"Sueldo inválido.", DATOS_INCOMPLETOS:"DNI y nombre son obligatorios." };
   return MSGS[code] || (err && err.message) || "Error desconocido.";
 }
 
@@ -698,6 +744,7 @@ async function renderPersonal(){
       <div class="personal-toolbar">
         <input type="text" id="personal-buscar" placeholder="Buscar por nombre, DNI o área…">
         <label style="font-size:11.5px;color:var(--muted);"><input type="checkbox" id="personal-solo-pendientes" style="margin-right:5px;">Solo pendientes</label>
+        <button class="btn-sm" style="margin-left:auto;" onclick="abrirPersonalModal(null)">+ Agregar colaborador</button>
       </div>
       <div class="personal-grid" id="personal-grid"></div>
     </div>
@@ -729,7 +776,10 @@ function pintarPersonalGrid(){
       <div class="nombre">${p.nombre}</div>
       <div class="meta">${p.dni} · ${[p.area, p.turno].filter(Boolean).join(" · ")}</div>
       <span class="estado-pill ${p.enrolado ? 'ok' : 'pend'}">${p.enrolado ? '✅ Enrolado' : '⏳ Pendiente'}</span>
-      ${p.enrolado ? `<button class="btn-sm" style="margin-top:10px;width:100%;" data-dni="${p.dni.replace(/"/g,'&quot;')}" data-nombre="${p.nombre.replace(/"/g,'&quot;')}" onclick="eliminarRostroPersonal(this)">🗑️ Quitar y re-enrolar</button>` : ""}
+      <div style="display:flex;gap:6px;margin-top:10px;">
+        <button class="btn-sm" style="flex:1;" onclick='abrirPersonalModal(${JSON.stringify(p).replace(/'/g,"&apos;")})'>✏️ Editar</button>
+        ${p.enrolado ? `<button class="btn-sm" style="flex:1;" data-dni="${p.dni.replace(/"/g,'&quot;')}" data-nombre="${p.nombre.replace(/"/g,'&quot;')}" onclick="eliminarRostroPersonal(this)">🗑️ Rostro</button>` : ""}
+      </div>
     </div>
   `).join("");
 }
@@ -743,7 +793,56 @@ async function eliminarRostroPersonal(btn){
     await renderPersonal();
   }catch(e){
     alert(humanError(e));
-    btn.disabled = false; btn.textContent = "🗑️ Quitar y re-enrolar";
+    btn.disabled = false; btn.textContent = "🗑️ Rostro";
+  }
+}
+
+/* ---------------- Modal alta / edicion / baja de personal ---------------- */
+function abrirPersonalModal(persona){
+  document.getElementById("personal-modal-titulo").textContent = persona ? "Editar colaborador" : "Agregar colaborador";
+  document.getElementById("pm-dni-original").value = persona ? persona.dni : "";
+  const dniInput = document.getElementById("pm-dni");
+  dniInput.value = persona ? persona.dni : "";
+  dniInput.disabled = !!persona; // el DNI no se cambia al editar, solo al crear uno nuevo
+  document.getElementById("pm-nombre").value = persona ? persona.nombre : "";
+  document.getElementById("pm-puesto").value = persona ? (persona.puesto || "") : "";
+  document.getElementById("pm-area").value = persona ? (persona.area || "") : "";
+  document.getElementById("pm-turno").value = persona ? (persona.turno || "") : "";
+  document.getElementById("pm-estado").value = "ACTIVO"; // este panel solo lista activos; si vuelve a abrir ya sera un alta
+  document.getElementById("pm-status").textContent = "";
+  document.getElementById("pm-status").className = "pm-status";
+  document.getElementById("personal-modal").classList.add("show");
+}
+function cerrarPersonalModal(){
+  document.getElementById("personal-modal").classList.remove("show");
+}
+async function guardarPersonalModal(){
+  const dni = document.getElementById("pm-dni").value.trim();
+  const nombre = document.getElementById("pm-nombre").value.trim();
+  const statusEl = document.getElementById("pm-status");
+  if(!dni || !nombre){
+    statusEl.className = "pm-status bad";
+    statusEl.textContent = "DNI y nombre son obligatorios.";
+    return;
+  }
+  const btn = document.getElementById("pm-guardar");
+  btn.disabled = true; btn.textContent = "Guardando…";
+  try{
+    await rpc("asis_personal_guardar", {
+      p_dni: dni,
+      p_nombre: nombre,
+      p_puesto: document.getElementById("pm-puesto").value.trim() || null,
+      p_area: document.getElementById("pm-area").value.trim() || null,
+      p_turno: document.getElementById("pm-turno").value || null,
+      p_estado: document.getElementById("pm-estado").value,
+    });
+    cerrarPersonalModal();
+    await renderPersonal();
+  }catch(e){
+    statusEl.className = "pm-status bad";
+    statusEl.textContent = humanError(e);
+  }finally{
+    btn.disabled = false; btn.textContent = "Guardar";
   }
 }
 
