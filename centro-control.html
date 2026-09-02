@@ -5,19 +5,38 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ADECCO · Centro de Control de Asistencia</title>
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
-<meta name="theme-color" content="#0B0D12">
+<meta name="theme-color" content="#F3F4F6" id="meta-theme-color">
+<script>
+  /* Blanco/rojo Adecco es el tema por defecto; modo noche es una eleccion
+     explicita que se recuerda. Se aplica antes del <style> para que no
+     "parpadee" el tema oscuro al cargar si el usuario ya lo eligio antes. */
+  try{
+    if(localStorage.getItem("control-theme") === "dark") document.documentElement.setAttribute("data-theme","dark");
+  }catch(e){}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
+    /* Blanco y rojo Adecco -- tema por defecto. */
+    --bg:#F3F4F6; --panel:#FFFFFF; --panel-alt:#F5F6F8; --border:#E5E7EB; --border-soft:#EEF0F3;
+    --text:#1A1D23; --muted:#8B92A0; --text-soft:#4B5563;
+    --red:#E31E24; --red-dim:#FDECEC; --red-tint:#FDECEC;
+    --green:#16A34A; --green-dim:#E9F9EF; --amber:#C97A05; --amber-dim:#FEF3E2;
+    --blue:#2563EB; --blue-dim:#EAF1FE; --purple:#7C3AED; --purple-dim:#F3ECFE; --cyan:#0E7490;
+    --mono:'IBM Plex Mono',monospace;
+    --shadow:0 4px 20px rgba(16,24,40,.08);
+  }
+  /* Modo noche -- eleccion explicita del usuario (boton en el header). */
+  :root[data-theme="dark"]{
     --bg:#0B0D12; --panel:#12151C; --panel-alt:#171B24; --border:#232733; --border-soft:#1B1F29;
     --text:#E7EAF0; --muted:#7C8496; --text-soft:#AEB4C2;
     --red:#FF3B4E; --red-dim:#4A1620; --red-tint:#2A121A;
     --green:#22C55E; --green-dim:#0F2A1C; --amber:#F5A623; --amber-dim:#332508;
     --blue:#3B82F6; --blue-dim:#0F1F3A; --purple:#A78BFA; --purple-dim:#241B3A; --cyan:#22D3EE;
-    --mono:'IBM Plex Mono',monospace;
     --shadow:0 4px 24px rgba(0,0,0,.4);
   }
+  body{transition:background .15s ease,color .15s ease;}
   *{box-sizing:border-box;}
   html,body{height:100%;}
   body{
@@ -32,7 +51,8 @@
 
   /* ============ Login ============ */
   #login-screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
-    background:radial-gradient(circle at 30% 20%, #1a1030 0%, #0B0D12 55%);z-index:50;}
+    background:radial-gradient(circle at 30% 20%, #FDECEC 0%, #F3F4F6 55%);z-index:50;}
+  :root[data-theme="dark"] #login-screen{background:radial-gradient(circle at 30% 20%, #1a1030 0%, #0B0D12 55%);}
   .login-card{width:min(90vw,380px);background:var(--panel);border:1px solid var(--border);border-radius:18px;
     padding:32px 28px;box-shadow:var(--shadow);}
   .login-card .logo-row{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
@@ -53,7 +73,8 @@
   #app.show{display:flex;}
 
   header{display:flex;align-items:center;gap:14px;padding:12px 20px;border-bottom:1px solid var(--border);
-    background:linear-gradient(180deg,#12151C,#0F1218);flex-shrink:0;}
+    background:var(--panel);flex-shrink:0;}
+  :root[data-theme="dark"] header{background:linear-gradient(180deg,#12151C,#0F1218);}
   header .logo-row{display:flex;align-items:center;gap:9px;}
   header img{width:28px;height:28px;}
   header b.brand{font-size:15.5px;color:var(--red);letter-spacing:.02em;}
@@ -67,6 +88,9 @@
   header .user-chip .role{background:var(--panel-alt);border:1px solid var(--border);border-radius:999px;padding:3px 10px;font-size:11px;color:var(--muted);}
   header .logout-btn{background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer;}
   header .logout-btn:hover{color:var(--text);border-color:var(--border-soft);}
+  .theme-toggle{background:var(--panel-alt);border:1px solid var(--border);color:var(--text);border-radius:8px;
+    width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:15px;cursor:pointer;flex-shrink:0;}
+  .theme-toggle:hover{border-color:var(--red);}
 
   nav#tabs{display:flex;gap:4px;padding:10px 20px 0;border-bottom:1px solid var(--border);background:var(--bg);flex-shrink:0;overflow-x:auto;}
   nav#tabs button{background:none;border:none;color:var(--muted);font-size:13px;font-weight:700;padding:10px 16px;
@@ -116,18 +140,15 @@
   .pill.f{background:var(--red-tint);color:var(--red);}
   .pill.fj{background:var(--amber-dim);color:var(--amber);}
 
-  /* ============ Live feed ============ */
-  #feed-list{display:flex;flex-direction:column;gap:0;max-height:520px;overflow:auto;}
-  .feed-row{display:flex;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px solid var(--border-soft);
-    animation:feedIn .35s ease;}
-  @keyframes feedIn{from{opacity:0;transform:translateY(-6px);background:var(--panel-alt);}to{opacity:1;transform:translateY(0);}}
-  .feed-row .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
-  .feed-row .dot.ingreso{background:var(--green);} .feed-row .dot.almuerzo_inicio,.feed-row .dot.almuerzo_fin{background:var(--amber);}
-  .feed-row .dot.salida{background:var(--red);}
-  .feed-row .nombre{font-weight:700;font-size:13px;}
-  .feed-row .meta{font-size:11px;color:var(--muted);}
-  .feed-row .tipo{margin-left:auto;font-size:11.5px;color:var(--text-soft);font-weight:600;}
-  .feed-row .hora{font-family:var(--mono);font-size:12px;color:var(--muted);min-width:56px;text-align:right;}
+  /* ============ Marcaciones de hoy (una fila por colaborador) ============ */
+  #feed-list{max-height:560px;overflow:auto;}
+  #feed-list td.nombre{font-weight:700;color:var(--text);}
+  #feed-list td.meta{color:var(--muted);font-size:11.5px;}
+  .hora-marcada{display:inline-block;font-family:var(--mono);font-weight:700;font-size:12px;padding:3px 10px;border-radius:7px;}
+  .hora-marcada.ingreso{background:var(--green-dim);color:var(--green);}
+  .hora-marcada.almuerzo{background:var(--amber-dim);color:var(--amber);}
+  .hora-marcada.salida{background:var(--red-tint);color:var(--red);}
+  .hora-pendiente{color:var(--muted);font-family:var(--mono);}
   .feed-empty{padding:30px;text-align:center;color:var(--muted);font-size:13px;}
 
   .loading{padding:30px;text-align:center;color:var(--muted);font-size:13px;}
@@ -195,6 +216,7 @@
     <span class="clock" id="clock">--:--:--</span>
     <div class="spacer"></div>
     <div class="user-chip"><span id="user-nombre">—</span><span class="role" id="user-rol">—</span></div>
+    <button class="theme-toggle" id="theme-toggle" type="button" title="Cambiar a modo noche">🌙</button>
     <button class="logout-btn" id="logout-btn">Salir</button>
   </header>
 
@@ -285,6 +307,13 @@ const FOTO_BUCKET = "asis-fotos";
 function urlFoto(fotoPath){ return SUPABASE_URL + "/storage/v1/object/public/" + FOTO_BUCKET + "/" + fotoPath; }
 
 function fmtHora(iso){ return new Date(iso).toLocaleTimeString("es-PE",{hour:"2-digit",minute:"2-digit",hour12:false}); }
+// Colores de grilla/ejes de Chart.js segun el tema activo (los charts se
+// reconstruyen desde cero en cada render, asi que basta con leer esto
+// de nuevo cada vez -- no hace falta actualizar instancias existentes).
+function ejesChartTema(){
+  const oscuro = document.documentElement.getAttribute("data-theme") === "dark";
+  return { grid: { color: oscuro ? "#232733" : "#E5E7EB" }, ticks: { color: oscuro ? "#7C8496" : "#8B92A0" } };
+}
 function fmtFecha(d){ return new Date(d+"T00:00:00").toLocaleDateString("es-PE",{day:"2-digit",month:"short"}); }
 function todayISO(){ return new Date().toLocaleDateString("sv-SE"); }
 function monthStartISO(){ const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-01`; }
@@ -341,6 +370,24 @@ document.getElementById("logout-btn").addEventListener("click", async () => {
   try{ localStorage.removeItem(SESSION_KEY); }catch(e){}
   location.reload();
 });
+
+/* ================= Tema (blanco/rojo por defecto, modo noche opcional) ================= */
+const themeToggleBtn = document.getElementById("theme-toggle");
+const metaThemeColor = document.getElementById("meta-theme-color");
+function aplicarIconoTema(){
+  const oscuro = document.documentElement.getAttribute("data-theme") === "dark";
+  themeToggleBtn.textContent = oscuro ? "☀️" : "🌙";
+  themeToggleBtn.title = oscuro ? "Cambiar a modo claro" : "Cambiar a modo noche";
+  metaThemeColor.setAttribute("content", oscuro ? "#0B0D12" : "#F3F4F6");
+}
+themeToggleBtn.addEventListener("click", () => {
+  const oscuro = document.documentElement.getAttribute("data-theme") === "dark";
+  if(oscuro){ document.documentElement.removeAttribute("data-theme"); try{ localStorage.setItem("control-theme","light"); }catch(e){} }
+  else{ document.documentElement.setAttribute("data-theme","dark"); try{ localStorage.setItem("control-theme","dark"); }catch(e){} }
+  aplicarIconoTema();
+  if(session) renderTabActivo(); // re-arma las graficas con los colores de grilla del tema nuevo
+});
+aplicarIconoTema();
 
 setInterval(() => {
   const el = document.getElementById("clock");
@@ -475,8 +522,8 @@ async function tickVivo(primeraVez){
         ${kpiTile("Ausentes (aún)", Math.max(0,ausentes), "activos sin ingreso marcado", "#7C8496")}
       </div>
       <div class="card">
-        <h3>Feed de marcaciones — hoy</h3>
-        <p class="hint">Se actualiza solo cada 5s. Últimas marcaciones primero.</p>
+        <h3>Marcaciones — hoy</h3>
+        <p class="hint">Una fila por colaborador; la hora queda registrada en su columna apenas marca. Se actualiza sola cada 5s.</p>
         <div id="feed-list"></div>
       </div>
     `;
@@ -502,17 +549,43 @@ async function tickVivo(primeraVez){
 function renderFeedList(marcas){
   const list = document.getElementById("feed-list");
   if(!list) return;
-  const ordenadas = [...marcas].sort((a,b) => new Date(b.registrado_en) - new Date(a.registrado_en));
-  if(!ordenadas.length){ list.innerHTML = `<div class="feed-empty">Todavía no hay marcaciones hoy.</div>`; return; }
-  list.innerHTML = ordenadas.map(m => `
-    <div class="feed-row">
-      <span class="dot ${m.tipo}"></span>
-      <span class="nombre">${m.nombre}</span>
-      <span class="meta">${[m.area, m.turno].filter(Boolean).join(" · ")}</span>
-      <span class="tipo">${TIPO_LABEL[m.tipo]}</span>
-      <span class="hora">${fmtHora(m.registrado_en)}</span>
+  if(!marcas.length){ list.innerHTML = `<div class="feed-empty">Todavía no hay marcaciones hoy.</div>`; return; }
+
+  // Una fila por colaborador con sus 4 horarios como columnas, no una fila
+  // por evento -- asi queda visible de un vistazo el control del dia
+  // completo (ingreso / salida almuerzo / retorno almuerzo / salida).
+  const porDni = {};
+  marcas.forEach(m => {
+    if(!porDni[m.dni]) porDni[m.dni] = { dni:m.dni, nombre:m.nombre, area:m.area, turno:m.turno, horas:{}, ultimo:m.registrado_en };
+    porDni[m.dni].horas[m.tipo] = m.registrado_en;
+    if(new Date(m.registrado_en) > new Date(porDni[m.dni].ultimo)) porDni[m.dni].ultimo = m.registrado_en;
+  });
+  const filas = Object.values(porDni).sort((a,b) => new Date(b.ultimo) - new Date(a.ultimo));
+
+  const celda = (iso, clase) => iso ? `<span class="hora-marcada ${clase}">${fmtHora(iso)}</span>` : `<span class="hora-pendiente">—</span>`;
+
+  list.innerHTML = `
+    <div class="table-scroll">
+      <table>
+        <thead><tr>
+          <th>Colaborador</th><th>Área · Turno</th>
+          <th class="num">Ingreso</th><th class="num">Salida almuerzo</th><th class="num">Retorno almuerzo</th><th class="num">Salida</th>
+        </tr></thead>
+        <tbody>
+          ${filas.map(f => `
+            <tr>
+              <td class="nombre">${f.nombre}</td>
+              <td class="meta">${[f.area, f.turno].filter(Boolean).join(" · ") || "—"}</td>
+              <td class="num">${celda(f.horas.ingreso, "ingreso")}</td>
+              <td class="num">${celda(f.horas.almuerzo_inicio, "almuerzo")}</td>
+              <td class="num">${celda(f.horas.almuerzo_fin, "almuerzo")}</td>
+              <td class="num">${celda(f.horas.salida, "salida")}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
     </div>
-  `).join("");
+  `;
 }
 
 /* ================= TAB: Ausentismo ================= */
@@ -556,7 +629,7 @@ async function renderAusentismo(){
   `;
 
   destroyChart("ausentDiario"); destroyChart("ausentDona"); destroyChart("ausentArea");
-  const darkGrid = { color:"#232733" }; const darkTicks = { color:"#7C8496" };
+  const { grid: darkGrid, ticks: darkTicks } = ejesChartTema();
 
   charts.ausentDiario = new Chart(document.getElementById("ch-ausent-diario"), {
     type:"line",
@@ -630,7 +703,7 @@ async function renderRotacion(){
   `;
 
   destroyChart("rotLinea");
-  const darkGrid = { color:"#232733" }; const darkTicks = { color:"#7C8496" };
+  const { grid: darkGrid, ticks: darkTicks } = ejesChartTema();
   charts.rotLinea = new Chart(document.getElementById("ch-rot-linea"), {
     type:"bar",
     data:{ labels: fechasAll.map(fmtFecha), datasets:[
@@ -698,7 +771,7 @@ async function renderGeneral(){
   `;
 
   destroyChart("genArea"); destroyChart("genTipo");
-  const darkGrid = { color:"#232733" }; const darkTicks = { color:"#7C8496" };
+  const { grid: darkGrid, ticks: darkTicks } = ejesChartTema();
   charts.genArea = new Chart(document.getElementById("ch-gen-area"), {
     type:"bar",
     data:{ labels: areasSorted.map(a=>a[0]), datasets:[
