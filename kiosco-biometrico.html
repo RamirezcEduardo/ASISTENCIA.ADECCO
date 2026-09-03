@@ -484,6 +484,13 @@ let procesando = false;    // ya se encontro match y se esta marcando (ignora nu
 let accionActual = null;
 let stableDni = null, stableCount = 0;
 let recognizeTimer = null;
+let resetTimer = null;     // auto-retorno a inicio tras marcar (o error) -- debe cancelarse
+                            // si el usuario sale antes (botón Cancelar), si no, dispara "fantasma"
+                            // sobre la sesión de la SIGUIENTE persona y le corta la cámara a mitad de su marcación.
+function programarVuelta(){
+  clearTimeout(resetTimer);
+  resetTimer = setTimeout(volverAInicio, RESET_DESPUES_MS);
+}
 
 async function cargarModelos(){
   await Promise.all([
@@ -540,6 +547,7 @@ function dibujarCaja(box, color){
 /* ---------------- Flujo: elegir accion -> escanear -> resultado ---------------- */
 
 async function abrirScan(accion){
+  clearTimeout(resetTimer); // por si quedó un auto-retorno pendiente de la persona anterior
   accionActual = accion;
   accionTag.textContent = ACCION_INFO[accion].tag;
   resultCard.hidden = true;
@@ -573,6 +581,7 @@ async function abrirScan(accion){
 function cerrarScan(){
   scanning = false;
   clearTimeout(recognizeTimer);
+  clearTimeout(resetTimer); // salir manual (Cancelar) no debe dejar un auto-retorno fantasma pendiente
   detenerCamara();
   scanView.classList.remove("show");
   accionActual = null;
@@ -644,7 +653,7 @@ async function procesarIdentidad(dni){
 
   if(!tipoReal){
     mostrarFeedback("Ya completaste tu almuerzo de hoy.", "error");
-    setTimeout(volverAInicio, RESET_DESPUES_MS);
+    programarVuelta();
     return;
   }
   await marcarAsistencia(data.dni, tipoReal);
@@ -709,12 +718,12 @@ async function marcarAsistencia(dni, tipoReal){
   });
   if(error){
     mostrarFeedback(humanError(error), "error");
-    setTimeout(volverAInicio, RESET_DESPUES_MS);
+    programarVuelta();
     return;
   }
   mostrarFeedback(`✅ ${TIPO_LABEL[tipoReal]} registrado — ${fmtHora(data.registrado_en)}`, "success");
   vibrarConfirmacion();
-  setTimeout(volverAInicio, RESET_DESPUES_MS);
+  programarVuelta();
 }
 
 function volverAInicio(){
