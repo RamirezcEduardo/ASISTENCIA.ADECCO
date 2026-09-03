@@ -125,14 +125,17 @@
   .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin-bottom:16px;}
   .card h3{margin:0 0 4px;font-size:14px;}
   .card p.hint{margin:0 0 12px;font-size:11.5px;color:var(--muted);}
+  .card-header-row{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;}
+  .card-header-row .btn-sm{flex-shrink:0;white-space:nowrap;}
   .chart-box{position:relative;height:260px;}
   .chart-box.tall{height:340px;}
 
   table{width:100%;border-collapse:collapse;font-size:12.5px;}
-  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border-soft);white-space:nowrap;}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--border-soft);white-space:nowrap;}
   th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.03em;position:sticky;top:0;background:var(--panel);}
-  tbody tr:hover{background:var(--panel-alt);}
-  .table-scroll{max-height:420px;overflow:auto;border-radius:10px;}
+  tbody tr:nth-child(even){background:var(--panel-alt);}
+  tbody tr:hover{background:var(--red-tint);}
+  .table-scroll{max-height:420px;overflow:auto;border-radius:10px;border:1px solid var(--border-soft);}
   td.num, th.num{text-align:right;font-family:var(--mono);}
   .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:10.5px;font-weight:700;}
   .pill.a{background:var(--green-dim);color:var(--green);}
@@ -144,10 +147,14 @@
   #feed-list{max-height:560px;overflow:auto;}
   #feed-list td.nombre{font-weight:700;color:var(--text);}
   #feed-list td.meta{color:var(--muted);font-size:11.5px;}
-  .hora-marcada{display:inline-block;font-family:var(--mono);font-weight:700;font-size:12px;padding:3px 10px;border-radius:7px;}
+  #feed-list tr.fila-tardanza{background:var(--red-tint);}
+  #feed-list tr.fila-tardanza:hover{background:var(--red-tint);filter:brightness(.96);}
+  .hora-marcada{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-weight:700;font-size:12px;padding:3px 10px;border-radius:7px;}
   .hora-marcada.ingreso{background:var(--green-dim);color:var(--green);}
   .hora-marcada.almuerzo{background:var(--amber-dim);color:var(--amber);}
   .hora-marcada.salida{background:var(--red-tint);color:var(--red);}
+  .hora-marcada.tardanza{background:var(--red);color:#fff;box-shadow:0 0 0 1px var(--red);}
+  .hora-marcada.tardanza b{font-weight:800;}
   .hora-pendiente{color:var(--muted);font-family:var(--mono);}
   .feed-empty{padding:30px;text-align:center;color:var(--muted);font-size:13px;}
 
@@ -522,11 +529,15 @@ async function tickVivo(primeraVez){
         ${kpiTile("Ausentes (aún)", Math.max(0,ausentes), "activos sin ingreso marcado", "#7C8496")}
       </div>
       <div class="card">
-        <h3>Marcaciones — hoy</h3>
-        <p class="hint">Una fila por colaborador; la hora queda registrada en su columna apenas marca. Se actualiza sola cada 5s.</p>
+        <div class="card-header-row">
+          <div><h3>Marcaciones — hoy</h3>
+          <p class="hint">Una fila por colaborador; la hora queda registrada en su columna apenas marca. Se actualiza sola cada 5s.</p></div>
+          <button class="btn-sm" id="btn-exportar-vivo">⬇ Exportar Excel</button>
+        </div>
         <div id="feed-list"></div>
       </div>
     `;
+    document.getElementById("btn-exportar-vivo").addEventListener("click", exportarVivoExcel);
     renderFeedList(marcasHoy);
   }else{
     // Solo actualiza KPIs + agrega filas nuevas al feed (evita "parpadeo" del resto).
@@ -546,10 +557,23 @@ async function tickVivo(primeraVez){
     }
   }
 }
+// Minutos de tardanza de un Ingreso vs. la hora de inicio de su turno
+// (misma referencia que usa la planilla en asis_planilla_calcular, para
+// que "tardanza" signifique lo mismo en todo el sistema).
+function minutosTarde(iso, turno){
+  const inicio = TURNO_INICIO[(turno||"").trim().toUpperCase()];
+  if(!inicio || !iso) return 0;
+  const [hI, mI] = inicio.split(":").map(Number);
+  const d = new Date(iso);
+  return Math.max(0, (d.getHours()*60 + d.getMinutes()) - (hI*60 + mI));
+}
+
+let ultimasFilasVivo = []; // para el boton de exportar
+
 function renderFeedList(marcas){
   const list = document.getElementById("feed-list");
   if(!list) return;
-  if(!marcas.length){ list.innerHTML = `<div class="feed-empty">Todavía no hay marcaciones hoy.</div>`; return; }
+  if(!marcas.length){ list.innerHTML = `<div class="feed-empty">Todavía no hay marcaciones hoy.</div>`; ultimasFilasVivo = []; return; }
 
   // Una fila por colaborador con sus 4 horarios como columnas, no una fila
   // por evento -- asi queda visible de un vistazo el control del dia
@@ -560,9 +584,16 @@ function renderFeedList(marcas){
     porDni[m.dni].horas[m.tipo] = m.registrado_en;
     if(new Date(m.registrado_en) > new Date(porDni[m.dni].ultimo)) porDni[m.dni].ultimo = m.registrado_en;
   });
-  const filas = Object.values(porDni).sort((a,b) => new Date(b.ultimo) - new Date(a.ultimo));
+  const filas = Object.values(porDni).map(f => ({ ...f, tarde: minutosTarde(f.horas.ingreso, f.turno) }))
+    .sort((a,b) => new Date(b.ultimo) - new Date(a.ultimo));
+  ultimasFilasVivo = filas;
 
   const celda = (iso, clase) => iso ? `<span class="hora-marcada ${clase}">${fmtHora(iso)}</span>` : `<span class="hora-pendiente">—</span>`;
+  const celdaIngreso = (f) => {
+    if(!f.horas.ingreso) return `<span class="hora-pendiente">—</span>`;
+    if(f.tarde > 0) return `<span class="hora-marcada tardanza" title="${f.tarde} min despues del inicio de turno">⚠ ${fmtHora(f.horas.ingreso)} <b>+${f.tarde}m</b></span>`;
+    return `<span class="hora-marcada ingreso">${fmtHora(f.horas.ingreso)}</span>`;
+  };
 
   list.innerHTML = `
     <div class="table-scroll">
@@ -573,10 +604,10 @@ function renderFeedList(marcas){
         </tr></thead>
         <tbody>
           ${filas.map(f => `
-            <tr>
+            <tr class="${f.tarde > 0 ? "fila-tardanza" : ""}">
               <td class="nombre">${f.nombre}</td>
               <td class="meta">${[f.area, f.turno].filter(Boolean).join(" · ") || "—"}</td>
-              <td class="num">${celda(f.horas.ingreso, "ingreso")}</td>
+              <td class="num">${celdaIngreso(f)}</td>
               <td class="num">${celda(f.horas.almuerzo_inicio, "almuerzo")}</td>
               <td class="num">${celda(f.horas.almuerzo_fin, "almuerzo")}</td>
               <td class="num">${celda(f.horas.salida, "salida")}</td>
@@ -586,6 +617,22 @@ function renderFeedList(marcas){
       </table>
     </div>
   `;
+}
+
+function exportarVivoExcel(){
+  if(!ultimasFilasVivo.length) return;
+  const rows = ultimasFilasVivo.map(f => ({
+    DNI: f.dni, Colaborador: f.nombre, Área: f.area || "", Turno: f.turno || "",
+    Ingreso: f.horas.ingreso ? fmtHora(f.horas.ingreso) : "",
+    "Min. tardanza": f.tarde || 0,
+    "Salida almuerzo": f.horas.almuerzo_inicio ? fmtHora(f.horas.almuerzo_inicio) : "",
+    "Retorno almuerzo": f.horas.almuerzo_fin ? fmtHora(f.horas.almuerzo_fin) : "",
+    Salida: f.horas.salida ? fmtHora(f.horas.salida) : "",
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Marcaciones");
+  XLSX.writeFile(wb, `marcaciones_${todayISO()}.xlsx`);
 }
 
 /* ================= TAB: Ausentismo ================= */
