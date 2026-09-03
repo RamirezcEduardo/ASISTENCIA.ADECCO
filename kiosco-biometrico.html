@@ -451,10 +451,22 @@ function mostrarIdleSiCorresponde(){
 }
 function reiniciarIdleTimer(){
   clearTimeout(idleTimer);
-  ocultarIdle();
   idleTimer = setTimeout(mostrarIdleSiCorresponde, IDLE_TIMEOUT_MS);
 }
+/* Solo reinicia el conteo aquí -- NO oculta el salvapantallas en este
+   listener. Ocultarlo ya en el pointerdown (antes de que el toque
+   termine) dejaba expuesto el botón de abajo, así que el click que
+   sigue (mismo gesto) le llegaba a Ingreso/Almuerzo/Salida en vez de
+   solo cerrar el salvapantallas -- "atravesaba" la pantalla. */
 ["pointerdown", "keydown"].forEach(ev => document.addEventListener(ev, reiniciarIdleTimer, { passive: true }));
+/* El salvapantallas se cierra con su propio click, consumiendo el
+   gesto completo (down + up sobre el mismo elemento), así nunca
+   queda expuesto un botón de marcación a mitad de un toque. */
+idleScreen.addEventListener("click", (e) => {
+  e.stopPropagation();
+  ocultarIdle();
+  reiniciarIdleTimer();
+});
 reiniciarIdleTimer();
 
 /* Vibracion corta al confirmar una marcacion -- confirmacion tactil,
