@@ -100,6 +100,8 @@
 
   #filter-bar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 20px;border-bottom:1px solid var(--border);
     background:var(--panel);flex-shrink:0;}
+  #filter-fechas{display:contents;}
+  #filter-fechas.oculto{display:none;}
   #filter-bar label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin-right:4px;}
   #filter-bar input, #filter-bar select{background:var(--panel-alt);border:1px solid var(--border);color:var(--text);
     border-radius:8px;padding:7px 10px;font-size:12.5px;}
@@ -246,8 +248,8 @@
   </nav>
 
   <div id="filter-bar">
-    <label>Desde</label><input type="date" id="f-desde">
-    <label>Hasta</label><input type="date" id="f-hasta">
+    <span id="filter-fechas"><label>Desde</label><input type="date" id="f-desde">
+    <label>Hasta</label><input type="date" id="f-hasta"></span>
     <label>Área</label><select id="f-area"><option value="">Todas</option></select>
     <button id="f-aplicar">Aplicar</button>
     <span class="hint" id="f-hint"></span>
@@ -466,7 +468,14 @@ document.querySelectorAll("#tabs button").forEach(btn => {
   });
 });
 function renderTabActivo(){
-  document.getElementById("f-hint").textContent = `${fmtFecha(filtros.desde)} → ${fmtFecha(filtros.hasta)}`;
+  // "En Vivo" siempre es HOY en tiempo real (se refresca solo cada 5s) --
+  // el rango de fechas del filtro no aplica ahi, asi que se oculta para
+  // no dar a entender que se puede "ver el ayer" en esa pestaña.
+  const esVivo = tabActivo === "vivo";
+  document.getElementById("filter-fechas").classList.toggle("oculto", esVivo);
+  document.getElementById("f-hint").textContent = esVivo
+    ? `Hoy, ${new Date().toLocaleDateString("es-PE",{weekday:"long",day:"numeric",month:"long"})} · en vivo`
+    : `${fmtFecha(filtros.desde)} → ${fmtFecha(filtros.hasta)}`;
   if(tabActivo === "vivo") renderVivo();
   else if(tabActivo === "ausentismo") renderAusentismo();
   else if(tabActivo === "rotacion") renderRotacion();
@@ -679,8 +688,16 @@ async function renderAusentismo(){
   try{ censo = await rpc("asis_censo", { p_desde: filtros.desde, p_hasta: filtros.hasta, p_area: filtros.area || null }); }
   catch(e){ panel.innerHTML = `<div class="loading">Error: ${humanError(e)}</div>`; return; }
 
+  if(!censo.length){
+    panel.innerHTML = `<div class="banner">No hay censo importado para ${fmtFecha(filtros.desde)} → ${fmtFecha(filtros.hasta)}${filtros.area ? " en "+filtros.area : ""}. Prueba otro rango de fechas o confirma con RR.HH. que ese período ya fue importado.</div>`;
+    return;
+  }
   const conCodigo = censo.filter(r => r.asistencia);
   const total = conCodigo.length;
+  if(!total){
+    panel.innerHTML = `<div class="banner">Hay ${censo.length} registro(s) de censo en este rango, pero ninguno tiene código de asistencia cargado todavía (columna "ASISTENCIA" del Excel vacía) — por eso el ausentismo aparece en blanco, no es un error. Suele completarse al cierre del día cuando RR.HH. actualiza esa columna.</div>`;
+    return;
+  }
   const porBucket = {}; ASIS_BUCKETS.forEach(b => porBucket[b.key] = 0);
   conCodigo.forEach(r => { const b = bucketOf(r.asistencia); if(b) porBucket[b.key]++; });
   const tasaAusentismo = total ? ((porBucket.F / total) * 100).toFixed(1) : "0.0";
