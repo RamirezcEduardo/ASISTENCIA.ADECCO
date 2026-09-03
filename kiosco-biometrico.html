@@ -154,6 +154,12 @@
     box-shadow:0 0 0 1px rgba(255,255,255,.1), 0 20px 50px -12px rgba(0,0,0,.6);}
   #cam-unit video, #cam-unit canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);}
 
+  /* Silueta guía de rostro -- capa puramente visual encima del video, no
+     interviene en el reconocimiento (face-api.js lee el <video> directo). */
+  .face-guide{position:absolute;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;pointer-events:none;}
+  .face-guide svg{width:58%;height:auto;filter:drop-shadow(0 2px 10px rgba(0,0,0,.4));}
+  #face-oval{fill:none;stroke-width:2.5;transition:stroke .15s ease;}
+
   .scan-hint-row{display:flex;align-items:center;justify-content:center;gap:10px;}
   .scan-hint{color:#fff;font-size:15.5px;font-weight:700;text-align:center;min-height:22px;}
   .scan-dot{width:8px;height:8px;border-radius:50%;background:var(--red);animation:blink 1.1s infinite;flex-shrink:0;}
@@ -171,15 +177,29 @@
   /* ---------------- Modal de registro biometrico ---------------- */
   #enroll-modal{position:fixed;inset:0;z-index:20;background:rgba(6,7,10,.72);backdrop-filter:blur(2px);display:none;align-items:center;justify-content:center;padding:16px;}
   #enroll-modal.show{display:flex;}
-  .enroll-card{width:min(92vw,400px);max-height:92vh;overflow:auto;background:var(--bg-soft);border:1px solid var(--border);border-radius:20px;padding:22px;box-shadow:0 30px 70px -15px rgba(0,0,0,.6);color:var(--text);}
+  /* Horizontal por defecto (la tablet queda fija en landscape): cámara a la
+     izquierda con ancho fijo, formulario+botones a la derecha SIEMPRE
+     visibles (nunca dependen de hacer scroll para llegar al botón). */
+  .enroll-card{width:min(94vw,760px);max-height:92vh;overflow:auto;background:var(--bg-soft);border:1px solid var(--border);border-radius:20px;
+    padding:22px;box-shadow:0 30px 70px -15px rgba(0,0,0,.6);color:var(--text);display:flex;gap:22px;align-items:stretch;}
+  .enroll-col-cam{flex:0 0 210px;}
+  .enroll-col-form{flex:1;min-width:0;display:flex;flex-direction:column;}
   .enroll-card h3{margin:0 0 4px;font-size:17px;display:flex;align-items:center;gap:8px;}
   .enroll-card h3 svg{width:19px;height:19px;color:var(--red);}
   .enroll-card p.hint{margin:0 0 14px;font-size:12.5px;color:var(--muted);}
   .enroll-card label{display:block;font-size:11px;color:var(--muted);margin:10px 0 4px;text-transform:uppercase;letter-spacing:.04em;font-weight:700;}
   .enroll-card input{width:100%;padding:12px;border-radius:10px;border:1px solid var(--border);font-size:16px;background:#0d1015;color:var(--text);}
   .enroll-card input:focus{outline:none;border-color:var(--red);}
-  #enroll-cam-slot{width:100%;aspect-ratio:4/3;border-radius:16px;overflow:hidden;margin-top:12px;background:#05060a;border:1px solid var(--border);}
+  #enroll-cam-slot{position:relative;width:100%;aspect-ratio:3/4;border-radius:16px;overflow:hidden;background:#05060a;border:1px solid var(--border);}
   .enroll-row{display:flex;gap:8px;margin-top:14px;}
+  .enroll-row-actions{margin-top:auto;padding-top:14px;}
+
+  /* Pantalla angosta/portrait (navegador normal, no la tablet fija en
+     horizontal): las columnas se apilan para no quedar apretadas. */
+  @media (max-width:640px), (orientation:portrait){
+    .enroll-card{flex-direction:column;}
+    .enroll-col-cam{flex:0 0 auto;}
+  }
   .btn{padding:13px 14px;border-radius:11px;border:none;font-size:14px;font-weight:700;flex:1;}
   .btn-primary{background:linear-gradient(135deg,#ff4b50,var(--red));color:#fff;}
   .btn-primary:disabled{opacity:.4;}
@@ -268,7 +288,7 @@
     </button>
   </div>
   <div class="scan-body" id="scan-body">
-    <div class="cam-frame-wrap"><div id="cam-unit"><video id="video" autoplay muted playsinline></video><canvas id="overlay-canvas"></canvas></div></div>
+    <div class="cam-frame-wrap"><div id="cam-unit"><video id="video" autoplay muted playsinline></video><canvas id="overlay-canvas"></canvas><div class="face-guide"><svg viewBox="0 0 200 260"><ellipse id="face-oval" cx="100" cy="130" rx="72" ry="105" stroke="rgba(255,255,255,.55)" stroke-dasharray="6 7"/></svg></div></div></div>
     <div class="scan-hint-row"><span class="scan-dot"></span><span class="scan-hint" id="scan-hint">Mira a la cámara…</span></div>
     <div class="result-card" id="result-card" hidden>
       <h2 id="result-nombre">—</h2>
@@ -281,25 +301,25 @@
 
 <div id="enroll-modal">
   <div class="enroll-card">
-    <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a5 5 0 0 0-5 5v2a5 5 0 0 0 10 0V7a5 5 0 0 0-5-5Z"/><path d="M8 14v1a4 4 0 0 0 8 0v-1M5 12v2a7 7 0 0 0 14 0v-2M12 21v-4"/></svg>Registro biométrico</h3>
-    <p class="hint">Enrola el rostro de un colaborador nuevo para que el kiosco lo reconozca automáticamente.</p>
-
-    <label for="enroll-dni">DNI</label>
-    <input id="enroll-dni" inputmode="numeric" maxlength="15" placeholder="Ej. 12345678">
-    <div class="enroll-row">
-      <button class="btn btn-ghost" id="enroll-buscar">Buscar colaborador</button>
+    <div class="enroll-col-cam">
+      <div id="enroll-cam-slot" hidden></div>
     </div>
-    <p class="enroll-info" id="enroll-info"></p>
+    <div class="enroll-col-form">
+      <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a5 5 0 0 0-5 5v2a5 5 0 0 0 10 0V7a5 5 0 0 0-5-5Z"/><path d="M8 14v1a4 4 0 0 0 8 0v-1M5 12v2a7 7 0 0 0 14 0v-2M12 21v-4"/></svg>Registro biométrico</h3>
+      <p class="hint">Busca al colaborador por DNI y captura su rostro dentro del óvalo.</p>
 
-    <div id="enroll-cam-slot" hidden></div>
+      <label for="enroll-dni">DNI</label>
+      <input id="enroll-dni" inputmode="numeric" maxlength="15" placeholder="Ej. 12345678">
+      <div class="enroll-row">
+        <button class="btn btn-ghost" id="enroll-buscar">Buscar colaborador</button>
+      </div>
+      <p class="enroll-info" id="enroll-info"></p>
+      <div class="enroll-status" id="enroll-status"></div>
 
-    <div class="enroll-row">
-      <button class="btn btn-primary" id="enroll-capturar" disabled>Capturar rostro (3 muestras)</button>
-    </div>
-    <div class="enroll-status" id="enroll-status"></div>
-
-    <div class="enroll-row">
-      <button class="btn btn-ghost" id="enroll-cerrar">Cerrar</button>
+      <div class="enroll-row enroll-row-actions">
+        <button class="btn btn-ghost" id="enroll-cerrar">Cerrar</button>
+        <button class="btn btn-primary" id="enroll-capturar" disabled>Capturar rostro (3 muestras)</button>
+      </div>
     </div>
   </div>
 </div>
@@ -490,14 +510,19 @@ async function detectarUnaVez(){
     .withFaceLandmarks()
     .withFaceDescriptor();
 }
+/* Antes dibujaba un rectángulo en overlay-canvas siguiendo la cara
+   detectada; ahora en vez de eso colorea el óvalo guía fijo (mismo
+   nombre/firma para no tocar cada punto donde se llama). */
 function dibujarCaja(box, color){
-  const ctx = overlayCanvas.getContext("2d");
-  ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-  if(!box) return;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 3;
-  const x = overlayCanvas.width - box.x - box.width; // espejado (scaleX(-1))
-  ctx.strokeRect(x, box.y, box.width, box.height);
+  const oval = document.getElementById("face-oval");
+  if(!oval) return;
+  if(!box){
+    oval.setAttribute("stroke", "rgba(255,255,255,.55)");
+    oval.setAttribute("stroke-dasharray", "6 7");
+  }else{
+    oval.setAttribute("stroke", color);
+    oval.setAttribute("stroke-dasharray", "none");
+  }
 }
 
 /* ---------------- Flujo: elegir accion -> escanear -> resultado ---------------- */
@@ -522,6 +547,7 @@ async function abrirScan(accion){
     }
     setHint("Solicitando acceso a la cámara…");
     await iniciarCamara();
+    dibujarCaja(null); // óvalo guía limpio (por si quedó en rojo/verde de un intento anterior)
   }catch(err){
     console.error(err);
     setHint("No se pudo iniciar: " + (err && err.message ? err.message : err));
@@ -733,6 +759,7 @@ enrollBuscarBtn.addEventListener("click", async () => {
     }
     enrollInfo.textContent = empleadoLabel + " · Solicitando acceso a la cámara…";
     await iniciarCamara();
+    dibujarCaja(null); // óvalo guía limpio
     enrollCamSlot.hidden = false;
     enrollCamSlot.appendChild(camUnit);
     camUnit.hidden = false;
@@ -753,11 +780,13 @@ enrollCapturarBtn.addEventListener("click", async () => {
     enrollStatus.textContent = `Capturando muestra ${i+1}/${ENROLL_SAMPLES}… mira a la cámara.`;
     const det = await detectarUnaVez();
     if(!det){
+      dibujarCaja(null);
       enrollStatus.className = "enroll-status bad";
       enrollStatus.textContent = "No se detectó un rostro. Acércate a la cámara e inténtalo de nuevo.";
       enrollCapturarBtn.disabled = false;
       return;
     }
+    dibujarCaja(det.detection.box, "#16A34A");
     muestras.push(Array.from(det.descriptor));
     await new Promise(r => setTimeout(r, 400));
   }
