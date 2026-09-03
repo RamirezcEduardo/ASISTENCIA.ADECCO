@@ -607,6 +607,20 @@ function colorDeNombre(nombre){
   for(const ch of String(nombre||"")) hash = (hash*31 + ch.charCodeAt(0)) >>> 0;
   return AVATAR_PALETA[hash % AVATAR_PALETA.length];
 }
+function avatarHtml(nombre){
+  return `<span class="avatar" style="background:${colorDeNombre(nombre)}22;color:${colorDeNombre(nombre)};">${iniciales(nombre)}</span>`;
+}
+// Celdas de hora compartidas entre la tabla de "En Vivo" y el "Registro
+// de marcaciones" de Asistencia General -- mismo look, una sola regla.
+function celdaHora(iso, clase){
+  return iso ? `<span class="hora-marcada ${clase}">${fmtHora(iso)}</span>` : `<span class="hora-pendiente">—</span>`;
+}
+function celdaIngresoConTardanza(iso, turno){
+  if(!iso) return `<span class="hora-pendiente">—</span>`;
+  const tarde = minutosTarde(iso, turno);
+  if(tarde > 0) return `<span class="hora-marcada tardanza" title="${tarde} min despues del inicio de turno"><span class="ico">⚠</span>${fmtHora(iso)} <b>+${tarde}m</b></span>`;
+  return `<span class="hora-marcada ingreso">${fmtHora(iso)}</span>`;
+}
 
 function renderFeedList(marcas, filtroTexto){
   const list = document.getElementById("feed-list");
@@ -631,13 +645,6 @@ function renderFeedList(marcas, filtroTexto){
   const q = vivoFiltroTexto.toLowerCase().trim();
   const filasFiltradas = !q ? filas : filas.filter(f => [f.nombre, f.dni, f.area, f.turno].some(v => (v||"").toLowerCase().includes(q)));
 
-  const celda = (iso, clase) => iso ? `<span class="hora-marcada ${clase}">${fmtHora(iso)}</span>` : `<span class="hora-pendiente">—</span>`;
-  const celdaIngreso = (f) => {
-    if(!f.horas.ingreso) return `<span class="hora-pendiente">—</span>`;
-    if(f.tarde > 0) return `<span class="hora-marcada tardanza" title="${f.tarde} min despues del inicio de turno"><span class="ico">⚠</span>${fmtHora(f.horas.ingreso)} <b>+${f.tarde}m</b></span>`;
-    return `<span class="hora-marcada ingreso">${fmtHora(f.horas.ingreso)}</span>`;
-  };
-
   if(!filasFiltradas.length){ list.innerHTML = `<div class="feed-empty">Sin resultados para "${vivoFiltroTexto}".</div>`; return; }
 
   list.innerHTML = `
@@ -650,12 +657,12 @@ function renderFeedList(marcas, filtroTexto){
         <tbody>
           ${filasFiltradas.map(f => `
             <tr class="${f.tarde > 0 ? "fila-tardanza" : ""}">
-              <td class="nombre"><span class="avatar" style="background:${colorDeNombre(f.nombre)}22;color:${colorDeNombre(f.nombre)};">${iniciales(f.nombre)}</span>${f.nombre}</td>
+              <td class="nombre">${avatarHtml(f.nombre)}${f.nombre}</td>
               <td class="meta">${[f.area, f.turno].filter(Boolean).join(" · ") || "—"}</td>
-              <td class="num">${celdaIngreso(f)}</td>
-              <td class="num">${celda(f.horas.almuerzo_inicio, "almuerzo")}</td>
-              <td class="num">${celda(f.horas.almuerzo_fin, "almuerzo")}</td>
-              <td class="num">${celda(f.horas.salida, "salida")}</td>
+              <td class="num">${celdaIngresoConTardanza(f.horas.ingreso, f.turno)}</td>
+              <td class="num">${celdaHora(f.horas.almuerzo_inicio, "almuerzo")}</td>
+              <td class="num">${celdaHora(f.horas.almuerzo_fin, "almuerzo")}</td>
+              <td class="num">${celdaHora(f.horas.salida, "salida")}</td>
             </tr>
           `).join("")}
         </tbody>
@@ -855,6 +862,17 @@ async function renderGeneral(){
 
   const areasSorted = Object.entries(porArea).sort((a,b) => (b[1].tarde) - (a[1].tarde));
 
+  // Registro de marcaciones del rango completo -- una fila por colaborador
+  // POR DIA (a diferencia de "En Vivo", que es solo hoy), para poder
+  // revisar cualquier fecha pasada con el mismo formato de columnas.
+  const porDniFecha2 = {};
+  marcas.forEach(m => {
+    const k = m.dni+"|"+m.fecha;
+    if(!porDniFecha2[k]) porDniFecha2[k] = { dni:m.dni, nombre:m.nombre, area:m.area, turno:m.turno, fecha:m.fecha, horas:{} };
+    porDniFecha2[k].horas[m.tipo] = m.registrado_en;
+  });
+  const filasGeneral = Object.values(porDniFecha2).sort((a,b) => b.fecha.localeCompare(a.fecha) || a.nombre.localeCompare(b.nombre));
+
   panel.innerHTML = `
     <div class="kpi-grid">
       ${kpiTile("Puntualidad", ingresos.length ? Math.round(aTiempo/ingresos.length*100)+"%" : "—", "ingresos a tiempo", "#22C55E", "⏱️")}
@@ -868,7 +886,20 @@ async function renderGeneral(){
       <div class="card"><h3>Marcaciones por tipo</h3>
         <div class="chart-box"><canvas id="ch-gen-tipo"></canvas></div></div>
     </div>
+    <div class="card">
+      <div class="card-header-row">
+        <div><h3>Registro de marcaciones</h3>
+        <p class="hint">Una fila por colaborador por día, para el rango de fechas del filtro (${fmtFecha(filtros.desde)} → ${fmtFecha(filtros.hasta)}).</p></div>
+        <button class="btn-sm" id="btn-exportar-general">⬇ Exportar Excel</button>
+      </div>
+      <input type="text" id="general-buscar" class="vivo-buscar" placeholder="Buscar colaborador, área o turno…">
+      <div id="general-lista"></div>
+    </div>
   `;
+
+  pintarDetalleGeneral(filasGeneral, "");
+  document.getElementById("general-buscar").addEventListener("input", (e) => pintarDetalleGeneral(filasGeneral, e.target.value));
+  document.getElementById("btn-exportar-general").addEventListener("click", () => exportarGeneralExcel(filasGeneral));
 
   destroyChart("genArea"); destroyChart("genTipo");
   const { grid: darkGrid, ticks: darkTicks } = ejesChartTema();
@@ -890,6 +921,58 @@ async function renderGeneral(){
     options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom",labels:{color:"#AEB4C2",boxWidth:10,font:{size:11}}},
       datalabels:{ formatter:(v,ctx)=>{ const t=ctx.dataset.data.reduce((a,b)=>a+b,0); return v+" ("+(t?Math.round(v/t*100):0)+"%)"; } } } }
   });
+}
+
+function pintarDetalleGeneral(filas, filtroTexto){
+  const list = document.getElementById("general-lista");
+  if(!list) return;
+  const q = (filtroTexto||"").toLowerCase().trim();
+  const filtradas = !q ? filas : filas.filter(f => [f.nombre, f.dni, f.area, f.turno].some(v => (v||"").toLowerCase().includes(q)));
+
+  if(!filas.length){ list.innerHTML = `<div class="feed-empty">Sin marcaciones en este rango de fechas.</div>`; return; }
+  if(!filtradas.length){ list.innerHTML = `<div class="feed-empty">Sin resultados para "${filtroTexto}".</div>`; return; }
+
+  list.innerHTML = `
+    <div class="table-scroll" style="max-height:480px;">
+      <table>
+        <thead><tr>
+          <th>Fecha</th><th>Colaborador</th><th>Área · Turno</th>
+          <th class="num">Ingreso</th><th class="num">Salida almuerzo</th><th class="num">Retorno almuerzo</th><th class="num">Salida</th>
+        </tr></thead>
+        <tbody>
+          ${filtradas.map(f => {
+            const t = minutosTarde(f.horas.ingreso, f.turno);
+            return `
+            <tr class="${t > 0 ? "fila-tardanza" : ""}">
+              <td class="meta">${fmtFecha(f.fecha)}</td>
+              <td class="nombre">${avatarHtml(f.nombre)}${f.nombre}</td>
+              <td class="meta">${[f.area, f.turno].filter(Boolean).join(" · ") || "—"}</td>
+              <td class="num">${celdaIngresoConTardanza(f.horas.ingreso, f.turno)}</td>
+              <td class="num">${celdaHora(f.horas.almuerzo_inicio, "almuerzo")}</td>
+              <td class="num">${celdaHora(f.horas.almuerzo_fin, "almuerzo")}</td>
+              <td class="num">${celdaHora(f.horas.salida, "salida")}</td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function exportarGeneralExcel(filas){
+  if(!filas.length) return;
+  const rows = filas.map(f => ({
+    Fecha: f.fecha, DNI: f.dni, Colaborador: f.nombre, Área: f.area || "", Turno: f.turno || "",
+    Ingreso: f.horas.ingreso ? fmtHora(f.horas.ingreso) : "",
+    "Min. tardanza": minutosTarde(f.horas.ingreso, f.turno),
+    "Salida almuerzo": f.horas.almuerzo_inicio ? fmtHora(f.horas.almuerzo_inicio) : "",
+    "Retorno almuerzo": f.horas.almuerzo_fin ? fmtHora(f.horas.almuerzo_fin) : "",
+    Salida: f.horas.salida ? fmtHora(f.horas.salida) : "",
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Marcaciones");
+  XLSX.writeFile(wb, `marcaciones_${filtros.desde}_a_${filtros.hasta}.xlsx`);
 }
 
 /* ================= TAB: Personal (enrolamiento biometrico) ================= */
