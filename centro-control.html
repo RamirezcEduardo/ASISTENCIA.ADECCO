@@ -756,12 +756,10 @@ async function renderAusentismo(){
       ${kpiTile("Marcaron ingreso", totalPresentesDia, "", "#22C55E", "✅")}
       ${kpiTile("Ausentes", totalAusentesDia, "activos que no marcaron", "#FF3B4E", "❌")}
     </div>
-    <div class="grid-2">
-      <div class="card"><h3>Ausentismo diario</h3><p class="hint">% de activos que no marcaron Ingreso, por día.</p>
-        <div class="chart-box"><canvas id="ch-ausent-diario"></canvas></div></div>
-      <div class="card"><h3>Ausentismo por área</h3><p class="hint">Ordenado de mayor a menor.</p>
-        <div class="chart-box"><canvas id="ch-ausent-area"></canvas></div></div>
-    </div>
+    <div class="card"><h3>Ausentismo diario</h3><p class="hint">% de activos que no marcaron Ingreso, por día.</p>
+      <div class="chart-box"><canvas id="ch-ausent-diario"></canvas></div></div>
+    <div class="card"><h3>Ausentismo por área</h3><p class="hint">Ordenado de mayor a menor.</p>
+      <div class="chart-box" style="height:${Math.max(220, areasSorted.length*38)}px;"><canvas id="ch-ausent-area"></canvas></div></div>
     <div class="card">
       <div class="card-header-row">
         <div><h3>Detalle de ausencias</h3><p class="hint">Colaboradores activos que no marcaron Ingreso ese día.</p></div>
@@ -885,7 +883,10 @@ async function renderRotacion(){
       ${kpiTile("Dotación activa", activosPromedio, filtros.area || "todas las áreas", "#3B82F6", "👥")}
     </div>
     <div class="card"><h3>Altas vs. Bajas por fecha</h3>
-      <div class="chart-box tall"><canvas id="ch-rot-linea"></canvas></div></div>
+      ${fechasAll.length
+        ? `<div class="chart-box tall"><canvas id="ch-rot-linea"></canvas></div>`
+        : `<div class="feed-empty">Sin altas ni bajas en ${fmtFecha(filtros.desde)} → ${fmtFecha(filtros.hasta)}${filtros.area ? " en "+filtros.area : ""}. Prueba un rango más amplio (ej. el mes completo) para ver movimientos de personal.</div>`}
+    </div>
     <div class="grid-2">
       <div class="card"><h3>Bajas por motivo</h3>
         <div class="table-scroll"><table><thead><tr><th>Motivo</th><th class="num">Cantidad</th></tr></thead>
@@ -899,17 +900,19 @@ async function renderRotacion(){
   `;
 
   destroyChart("rotLinea");
-  const { grid: darkGrid, ticks: darkTicks } = ejesChartTema();
-  charts.rotLinea = new Chart(document.getElementById("ch-rot-linea"), {
-    type:"bar",
-    data:{ labels: fechasAll.map(fmtFecha), datasets:[
-      { label:"Altas", data: fechasAll.map(f=>porFechaAlta[f]||0), backgroundColor:"#22C55E", borderRadius:4 },
-      { label:"Bajas", data: fechasAll.map(f=>porFechaBaja[f]||0), backgroundColor:"#FF3B4E", borderRadius:4 },
-    ]},
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{labels:{color:"#AEB4C2"}},
-      datalabels:{ color:"#fff", anchor:"end", align:"top", clamp:true } },
-      scales:{ x:{grid:darkGrid,ticks:darkTicks}, y:{grid:darkGrid,ticks:darkTicks,beginAtZero:true} } }
-  });
+  if(fechasAll.length){
+    const { grid: darkGrid, ticks: darkTicks } = ejesChartTema();
+    charts.rotLinea = new Chart(document.getElementById("ch-rot-linea"), {
+      type:"bar",
+      data:{ labels: fechasAll.map(fmtFecha), datasets:[
+        { label:"Altas", data: fechasAll.map(f=>porFechaAlta[f]||0), backgroundColor:"#22C55E", borderRadius:4 },
+        { label:"Bajas", data: fechasAll.map(f=>porFechaBaja[f]||0), backgroundColor:"#FF3B4E", borderRadius:4 },
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{labels:{color:"#AEB4C2"}},
+        datalabels:{ color:"#fff", anchor:"end", align:"top", clamp:true } },
+        scales:{ x:{grid:darkGrid,ticks:darkTicks}, y:{grid:darkGrid,ticks:darkTicks,beginAtZero:true} } }
+    });
+  }
 }
 
 /* ================= TAB: Asistencia General ================= */
