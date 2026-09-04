@@ -687,53 +687,101 @@ function exportarVivoExcel(){
   XLSX.writeFile(wb, `marcaciones_${todayISO()}.xlsx`);
 }
 
-/* ================= TAB: Ausentismo ================= */
+/* ================= TAB: Ausentismo =================
+   El ausentismo se calcula con datos propios y en tiempo real: activo
+   segun el censo del dia vs. quien marco Ingreso en el kiosko
+   (asis_marcaciones). No depende de que RR.HH. haya cargado la columna
+   "ASISTENCIA" del Excel -- ese codigo (A/V/F/AM/DF/...) se muestra
+   aparte, como clasificacion complementaria, solo cuando existe. */
 async function renderAusentismo(){
   const panel = document.getElementById("panel-ausentismo");
   panel.innerHTML = `<div class="loading">Cargando…</div>`;
-  let censo;
-  try{ censo = await rpc("asis_censo", { p_desde: filtros.desde, p_hasta: filtros.hasta, p_area: filtros.area || null }); }
-  catch(e){ panel.innerHTML = `<div class="loading">Error: ${humanError(e)}</div>`; return; }
+  let censo, marcas;
+  try{
+    [censo, marcas] = await Promise.all([
+      rpc("asis_censo", { p_desde: filtros.desde, p_hasta: filtros.hasta, p_area: filtros.area || null }),
+      rpc("asis_reporte", { p_desde: filtros.desde, p_hasta: filtros.hasta, p_area: filtros.area || null }),
+    ]);
+  }catch(e){ panel.innerHTML = `<div class="loading">Error: ${humanError(e)}</div>`; return; }
 
   if(!censo.length){
     panel.innerHTML = `<div class="banner">No hay censo importado para ${fmtFecha(filtros.desde)} → ${fmtFecha(filtros.hasta)}${filtros.area ? " en "+filtros.area : ""}. Prueba otro rango de fechas o confirma con RR.HH. que ese período ya fue importado.</div>`;
     return;
   }
+
+  // Activo por dia (censo) vs. quien marco Ingreso ese dia (biometrico).
+  const porFechaActivos = {}; // fecha -> [persona,...] (solo ACTIVO)
+  censo.forEach(r => { if(r.estado === "ACTIVO"){ (porFechaActivos[r.fecha] ||= []).push(r); } });
+  const porFechaIngreso = {}; // fecha -> Set(dni)
+  marcas.filter(m => m.tipo === "ingreso").forEach(m => (porFechaIngreso[m.fecha] ||= new Set()).add(m.dni));
+
+  const fechas = Object.keys(porFechaActivos).sort();
+  let totalActivosDia = 0, totalPresentesDia = 0;
+  const ausenciasDetalle = [];
+  const porFechaTasa = {};
+  const porAreaCont = {}; // area -> {activos, presentes}
+  fechas.forEach(f => {
+    const activos = porFechaActivos[f];
+    const marcaron = porFechaIngreso[f] || new Set();
+    const presentes = activos.filter(p => marcaron.has(p.dni));
+    const ausentes = activos.filter(p => !marcaron.has(p.dni));
+    totalActivosDia += activos.length;
+    totalPresentesDia += presentes.length;
+    porFechaTasa[f] = activos.length ? (ausentes.length/activos.length*100) : 0;
+    ausentes.forEach(p => ausenciasDetalle.push({ ...p }));
+    activos.forEach(p => {
+      const a = p.area || "N/A";
+      (porAreaCont[a] ||= { activos:0, presentes:0 });
+      porAreaCont[a].activos++;
+      if(marcaron.has(p.dni)) porAreaCont[a].presentes++;
+    });
+  });
+  const totalAusentesDia = totalActivosDia - totalPresentesDia;
+  const tasaAusentismo = totalActivosDia ? (totalAusentesDia/totalActivosDia*100).toFixed(1) : "0.0";
+  const areasSorted = Object.entries(porAreaCont)
+    .map(([a,c]) => [a, c, c.activos ? (c.activos-c.presentes)/c.activos*100 : 0])
+    .sort((a,b) => b[2]-a[2]);
+
+  ultimasAusenciasDetalle = ausenciasDetalle.sort((a,b) => b.fecha.localeCompare(a.fecha) || a.nombre.localeCompare(b.nombre));
+
+  // Clasificacion RR.HH. (A/V/F/FJ) -- complementaria, puede no existir.
   const conCodigo = censo.filter(r => r.asistencia);
-  const total = conCodigo.length;
-  if(!total){
-    panel.innerHTML = `<div class="banner">Hay ${censo.length} registro(s) de censo en este rango, pero ninguno tiene código de asistencia cargado todavía (columna "ASISTENCIA" del Excel vacía) — por eso el ausentismo aparece en blanco, no es un error. Suele completarse al cierre del día cuando RR.HH. actualiza esa columna.</div>`;
-    return;
-  }
   const porBucket = {}; ASIS_BUCKETS.forEach(b => porBucket[b.key] = 0);
   conCodigo.forEach(r => { const b = bucketOf(r.asistencia); if(b) porBucket[b.key]++; });
-  const tasaAusentismo = total ? ((porBucket.F / total) * 100).toFixed(1) : "0.0";
-
-  const porFecha = {};
-  conCodigo.forEach(r => { (porFecha[r.fecha] ||= {A:0,V:0,F:0,FJ:0,total:0}); const b = bucketOf(r.asistencia); if(b){ porFecha[r.fecha][b.key]++; porFecha[r.fecha].total++; } });
-  const fechas = Object.keys(porFecha).sort();
-
-  const porArea = {};
-  conCodigo.forEach(r => { const a = r.area || "N/A"; (porArea[a] ||= {A:0,V:0,F:0,FJ:0,total:0}); const b = bucketOf(r.asistencia); if(b){ porArea[a][b.key]++; porArea[a].total++; } });
-  const areasSorted = Object.entries(porArea).sort((a,b) => (b[1].F/b[1].total) - (a[1].F/a[1].total));
 
   panel.innerHTML = `
     <div class="kpi-grid">
-      ${kpiTile("Tasa de ausentismo", tasaAusentismo+"%", "Faltas / registros con código", "#FF3B4E", "📉")}
-      ${kpiTile("Asistencia", porBucket.A, "código A", "#22C55E", "✅")}
-      ${kpiTile("Faltas", porBucket.F, "código F", "#FF3B4E", "❌")}
-      ${kpiTile("Faltas justificadas", porBucket.FJ, "AM/DF/DM/DT/FRD/LCGH/LSGH/P/S", "#F5A623", "📄")}
-      ${kpiTile("Vacaciones", porBucket.V, "código V", "#A78BFA", "🏖️")}
+      ${kpiTile("Tasa de ausentismo", tasaAusentismo+"%", "activos sin marcar Ingreso / activos", "#FF3B4E", "📉")}
+      ${kpiTile("Activos (persona-día)", totalActivosDia, "suma de activos por día", "#3B82F6", "👥")}
+      ${kpiTile("Marcaron ingreso", totalPresentesDia, "", "#22C55E", "✅")}
+      ${kpiTile("Ausentes", totalAusentesDia, "activos que no marcaron", "#FF3B4E", "❌")}
     </div>
     <div class="grid-2">
-      <div class="card"><h3>Ausentismo diario</h3><p class="hint">% de faltas por día en el rango seleccionado.</p>
+      <div class="card"><h3>Ausentismo diario</h3><p class="hint">% de activos que no marcaron Ingreso, por día.</p>
         <div class="chart-box"><canvas id="ch-ausent-diario"></canvas></div></div>
-      <div class="card"><h3>Distribución</h3><p class="hint">Asistencia / Vacaciones / Faltas / F.J.</p>
-        <div class="chart-box"><canvas id="ch-ausent-dona"></canvas></div></div>
+      <div class="card"><h3>Ausentismo por área</h3><p class="hint">Ordenado de mayor a menor.</p>
+        <div class="chart-box"><canvas id="ch-ausent-area"></canvas></div></div>
     </div>
-    <div class="card"><h3>Tasa de faltas por área</h3><p class="hint">Ordenado de mayor a menor.</p>
-      <div class="chart-box tall"><canvas id="ch-ausent-area"></canvas></div></div>
+    <div class="card">
+      <div class="card-header-row">
+        <div><h3>Detalle de ausencias</h3><p class="hint">Colaboradores activos que no marcaron Ingreso ese día.</p></div>
+        <button class="btn-sm" id="btn-exportar-ausencias">⬇ Exportar Excel</button>
+      </div>
+      <input type="text" id="ausencias-buscar" class="vivo-buscar" placeholder="Buscar colaborador, área o turno…">
+      <div id="ausencias-lista"></div>
+    </div>
+    ${conCodigo.length ? `
+    <div class="card">
+      <h3>Clasificación RR.HH. (complementaria)</h3>
+      <p class="hint">Según la columna "ASISTENCIA" del censo importado — códigos A/V/F y faltas justificadas. ${censo.length - conCodigo.length ? `Sin código todavía: ${censo.length - conCodigo.length} registro(s).` : ""}</p>
+      <div class="chart-box"><canvas id="ch-ausent-dona"></canvas></div>
+    </div>` : `
+    <div class="banner">RR.HH. todavía no cargó la columna "ASISTENCIA" (códigos A/V/F/AM/DF/...) para este rango — no afecta la tasa de ausentismo de arriba, que ya se calcula con las marcaciones biométricas reales.</div>`}
   `;
+
+  pintarDetalleAusencias(ultimasAusenciasDetalle, "");
+  document.getElementById("ausencias-buscar").addEventListener("input", (e) => pintarDetalleAusencias(ultimasAusenciasDetalle, e.target.value));
+  document.getElementById("btn-exportar-ausencias").addEventListener("click", exportarAusenciasExcel);
 
   destroyChart("ausentDiario"); destroyChart("ausentDona"); destroyChart("ausentArea");
   const { grid: darkGrid, ticks: darkTicks } = ejesChartTema();
@@ -741,28 +789,69 @@ async function renderAusentismo(){
   charts.ausentDiario = new Chart(document.getElementById("ch-ausent-diario"), {
     type:"line",
     data:{ labels: fechas.map(fmtFecha), datasets:[{
-      label:"% faltas", data: fechas.map(f => (porFecha[f].F/porFecha[f].total*100).toFixed(1)),
+      label:"% ausentismo", data: fechas.map(f => porFechaTasa[f].toFixed(1)),
       borderColor:"#FF3B4E", backgroundColor:"rgba(255,59,78,.12)", fill:true, tension:.3,
     }]},
     options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},
       datalabels:{ color:"#FF8A93", anchor:"end", align:"top", clamp:true, formatter:v=>v+"%" } },
       scales:{ x:{grid:darkGrid,ticks:darkTicks}, y:{grid:darkGrid,ticks:darkTicks,beginAtZero:true} } }
   });
-  charts.ausentDona = new Chart(document.getElementById("ch-ausent-dona"), {
-    type:"doughnut",
-    data:{ labels: ASIS_BUCKETS.map(b=>b.label), datasets:[{ data: ASIS_BUCKETS.map(b=>porBucket[b.key]), backgroundColor: ASIS_BUCKETS.map(b=>b.color), borderWidth:0 }] },
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom",labels:{color:"#AEB4C2",boxWidth:10,font:{size:11}}},
-      datalabels:{ formatter:(v,ctx)=>{ const t=ctx.dataset.data.reduce((a,b)=>a+b,0); return v+" ("+(t?Math.round(v/t*100):0)+"%)"; } } } }
-  });
   charts.ausentArea = new Chart(document.getElementById("ch-ausent-area"), {
     type:"bar",
     data:{ labels: areasSorted.map(a=>a[0]), datasets:[{
-      label:"% faltas", data: areasSorted.map(a => (a[1].F/a[1].total*100).toFixed(1)), backgroundColor:"#FF3B4E", borderRadius:4,
+      label:"% ausentismo", data: areasSorted.map(a => a[2].toFixed(1)), backgroundColor:"#FF3B4E", borderRadius:4,
     }]},
     options:{ indexAxis:"y", responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},
       datalabels:{ color:"#fff", anchor:"center", align:"center", formatter:v=>v+"%" } },
       scales:{ x:{grid:darkGrid,ticks:darkTicks,beginAtZero:true}, y:{grid:{display:false},ticks:darkTicks} } }
   });
+  if(conCodigo.length){
+    charts.ausentDona = new Chart(document.getElementById("ch-ausent-dona"), {
+      type:"doughnut",
+      data:{ labels: ASIS_BUCKETS.map(b=>b.label), datasets:[{ data: ASIS_BUCKETS.map(b=>porBucket[b.key]), backgroundColor: ASIS_BUCKETS.map(b=>b.color), borderWidth:0 }] },
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom",labels:{color:"#AEB4C2",boxWidth:10,font:{size:11}}},
+        datalabels:{ formatter:(v,ctx)=>{ const t=ctx.dataset.data.reduce((a,b)=>a+b,0); return v+" ("+(t?Math.round(v/t*100):0)+"%)"; } } } }
+    });
+  }
+}
+
+let ultimasAusenciasDetalle = [];
+function pintarDetalleAusencias(filas, filtroTexto){
+  const list = document.getElementById("ausencias-lista");
+  if(!list) return;
+  const q = (filtroTexto||"").toLowerCase().trim();
+  const filtradas = !q ? filas : filas.filter(f => [f.nombre, f.dni, f.area, f.turno].some(v => (v||"").toLowerCase().includes(q)));
+
+  if(!filas.length){ list.innerHTML = `<div class="feed-empty">Sin ausencias en este rango — todos los activos marcaron Ingreso.</div>`; return; }
+  if(!filtradas.length){ list.innerHTML = `<div class="feed-empty">Sin resultados para "${filtroTexto}".</div>`; return; }
+
+  list.innerHTML = `
+    <div class="table-scroll" style="max-height:420px;">
+      <table>
+        <thead><tr><th>Fecha</th><th>Colaborador</th><th>Área · Turno</th><th>Puesto</th></tr></thead>
+        <tbody>
+          ${filtradas.map(f => `
+            <tr>
+              <td class="meta">${fmtFecha(f.fecha)}</td>
+              <td class="nombre">${avatarHtml(f.nombre)}${f.nombre}</td>
+              <td class="meta">${[f.area, f.turno].filter(Boolean).join(" · ") || "—"}</td>
+              <td class="meta">${f.puesto || "—"}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+function exportarAusenciasExcel(){
+  if(!ultimasAusenciasDetalle.length) return;
+  const rows = ultimasAusenciasDetalle.map(f => ({
+    Fecha: f.fecha, DNI: f.dni, Colaborador: f.nombre, Área: f.area || "", Turno: f.turno || "", Puesto: f.puesto || "",
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Ausencias");
+  XLSX.writeFile(wb, `ausencias_${filtros.desde}_a_${filtros.hasta}.xlsx`);
 }
 
 /* ================= TAB: Rotación ================= */
