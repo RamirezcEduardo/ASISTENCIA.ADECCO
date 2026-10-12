@@ -130,6 +130,8 @@
   .grid-2{display:grid;grid-template-columns:1.3fr 1fr;gap:16px;}
   .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
   @media (max-width:980px){.grid-2,.grid-3{grid-template-columns:1fr;}}
+  /* Sin esto una tabla ancha dentro de una tarjeta empuja la columna del grid y la tarjeta se sale de la pantalla. */
+  .grid-2 > *,.grid-3 > *{min-width:0;}
   .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin-bottom:16px;}
   .card h3{margin:0 0 4px;font-size:14px;}
   .card p.hint{margin:0 0 12px;font-size:11.5px;color:var(--muted);}
@@ -321,6 +323,25 @@
   .cfg-area:has(input:checked){border-color:var(--red);background:var(--red-tint);font-weight:700;}
   .cfg-area small{margin-left:auto;font-family:var(--mono);color:var(--muted);}
   .cfg-area input{accent-color:var(--red);}
+
+  /* ============ Celular: que nada se salga de la pantalla (Salir, modo noche, barras de herramientas) ============ */
+  @media (max-width:640px){
+    header{padding:10px 12px;gap:8px;}
+    header .subtitle,header .clock{display:none;}
+    header .user-chip{min-width:0;margin-left:auto;}
+    header .user-chip #user-nombre{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    header .user-chip .role{display:none;}
+    nav#tabs{padding:8px 12px 0;}
+    #filter-bar{padding:10px 12px;}
+    #filter-bar .hint{margin-left:0;width:100%;}
+    main{padding:12px;}
+    .card-header-row{flex-wrap:wrap;}
+    .pk-hd-tools{width:100%;justify-content:flex-start;}
+    .pk-hd-tools .pk-seg{width:100%;}
+    .pk-seg button{flex:1;white-space:normal;padding:7px 8px;font-size:11.5px;}
+    .personal-toolbar{flex-wrap:wrap;}
+    .personal-toolbar input{max-width:none;}
+  }
 </style>
 </head>
 <body>
@@ -1018,7 +1039,15 @@ async function renderAusentismo(){
   const porFechaIngreso = {}; // fecha -> Set(dni)
   marcas.filter(m => m.tipo === "ingreso").forEach(m => (porFechaIngreso[m.fecha] ||= new Set()).add(m.dni));
 
-  const fechas = Object.keys(porFechaActivos).sort();
+  // Un día en que NADIE marcó Ingreso no es "100% de ausentismo": es un día sin datos (el kiosco no registró
+  // a nadie, p. ej. todavía no se usaba). Se deja fuera del cálculo y se avisa, en vez de inflar la tasa.
+  const fechasCenso = Object.keys(porFechaActivos).sort();
+  const fechas = fechasCenso.filter(f => porFechaIngreso[f] && porFechaIngreso[f].size);
+  const diasSinMarcas = fechasCenso.length - fechas.length;
+  if(!fechas.length){
+    panel.innerHTML = `<div class="banner">No hay marcaciones biométricas de Ingreso entre ${fmtFecha(filtros.desde)} y ${fmtFecha(filtros.hasta)}${filtros.area ? " en "+filtros.area : ""}, así que el ausentismo no se puede calcular. No se muestra 100% porque eso sería falta de datos, no ausentismo. Elige un rango en el que el kiosco ya haya registrado ingresos.</div>`;
+    return;
+  }
   let totalActivosDia = 0, totalPresentesDia = 0;
   const ausenciasDetalle = [];
   const porFechaTasa = {};
@@ -1062,6 +1091,7 @@ async function renderAusentismo(){
   conCodigo.forEach(r => { const b = bucketOf(r.asistencia); if(b) porBucket[b.key]++; });
 
   panel.innerHTML = `
+    ${diasSinMarcas ? `<div class="banner">${diasSinMarcas} de ${fechasCenso.length} días del rango no tienen ninguna marcación de Ingreso y no se cuentan (el kiosco no registró a nadie esos días).</div>` : ""}
     <div class="kpi-grid">
       ${kpiTile("Tasa de ausentismo", tasaAusentismo+"%", "activos sin marcar Ingreso / activos", "#FF3B4E", "📉")}
       ${kpiTile("Activos (persona-día)", totalActivosDia, "suma de activos por día", "#3B82F6", "👥")}
@@ -1189,17 +1219,28 @@ async function renderRotacion(){
   registrarAreas(censo);
   censo = filtrarZona(censo);
 
-  const porDni = {};
-  censo.forEach(r => { porDni[r.dni] ||= r; });
-  const roster = Object.values(porDni);
+  // El censo trae un registro por persona y día: se arma la serie de cada persona para ver cómo cambió su estado.
+  const series = {};
+  censo.forEach(r => { (series[r.dni] ||= []).push(r); });
+  const enRango = (f) => !!f && f >= filtros.desde && f <= filtros.hasta;
+  const roster = [], bajas = [];
+  Object.values(series).forEach(s => {
+    s.sort((a, b) => a.fecha.localeCompare(b.fecha));
+    const primero = s[0], ultimo = s[s.length - 1];
+    roster.push(primero);
+    if(ultimo.estado === "ACTIVO") return;
+    // Baja = cesó con fecha de cese dentro del rango, o pasó de activo a no activo dentro del rango aunque
+    // RR.HH. no haya cargado la fecha de cese (en ese caso se toma el día en que dejó de figurar activo).
+    if(enRango(ultimo.f_cese)) bajas.push({ ...ultimo, f_baja: ultimo.f_cese });
+    else if(primero.estado === "ACTIVO") bajas.push({ ...ultimo, f_baja: s.find(x => x.estado !== "ACTIVO").fecha, sinFechaCese: true });
+  });
 
-  const altas = roster.filter(r => r.f_ingreso && r.f_ingreso >= filtros.desde && r.f_ingreso <= filtros.hasta);
-  const bajas = roster.filter(r => r.f_cese && r.f_cese >= filtros.desde && r.f_cese <= filtros.hasta);
+  const altas = roster.filter(r => enRango(r.f_ingreso));
   const activosPromedio = roster.filter(r => r.estado === "ACTIVO").length || 1;
   const tasaRotacion = ((bajas.length / activosPromedio) * 100).toFixed(1);
 
   const porFechaAlta = {}; altas.forEach(r => { porFechaAlta[r.f_ingreso] = (porFechaAlta[r.f_ingreso]||0)+1; });
-  const porFechaBaja = {}; bajas.forEach(r => { porFechaBaja[r.f_cese] = (porFechaBaja[r.f_cese]||0)+1; });
+  const porFechaBaja = {}; bajas.forEach(r => { porFechaBaja[r.f_baja] = (porFechaBaja[r.f_baja]||0)+1; });
   const fechasAll = [...new Set([...Object.keys(porFechaAlta), ...Object.keys(porFechaBaja)])].sort();
 
   const motivos = {}; bajas.forEach(r => { const m = r.motivo_cese || "Sin especificar"; motivos[m] = (motivos[m]||0)+1; });
@@ -1223,7 +1264,8 @@ async function renderRotacion(){
       </div>
       <div class="card"><h3>Detalle de bajas</h3>
         <div class="table-scroll"><table><thead><tr><th>DNI</th><th>Nombre</th><th>Área</th><th>Fecha cese</th><th>Motivo</th></tr></thead>
-        <tbody>${bajas.map(r=>`<tr><td>${r.dni}</td><td>${r.nombre}</td><td>${r.area||"—"}</td><td>${fmtFecha(r.f_cese)}</td><td>${r.motivo_cese||"—"}</td></tr>`).join("") || '<tr><td colspan="5" class="hint">Sin bajas en el período.</td></tr>'}</tbody></table></div>
+        <tbody>${bajas.sort((a,b) => b.f_baja.localeCompare(a.f_baja) || a.nombre.localeCompare(b.nombre)).map(r=>`<tr><td>${r.dni}</td><td>${r.nombre}</td><td>${r.area||"—"}</td><td>${fmtFecha(r.f_baja)}${r.sinFechaCese ? " *" : ""}</td><td>${r.motivo_cese||"—"}</td></tr>`).join("") || '<tr><td colspan="5" class="hint">Sin bajas en el período.</td></tr>'}</tbody></table></div>
+        ${bajas.some(r => r.sinFechaCese) ? `<p class="hint" style="margin:10px 0 0;">* Sin fecha de cese cargada por RR.HH.: se toma el día en que la persona dejó de figurar como activa en el censo (puede ser posterior a su salida real si el listado no se actualizó antes).</p>` : ""}
       </div>
     </div>
   `;
@@ -1699,7 +1741,13 @@ async function cargarFunciones(){
   catch(e){ funcionesCat = []; funcionesError = e; }
   return !funcionesError;
 }
+// Vacaciones y Falta no son una función de trabajo sino el motivo por el que alguien no trabaja ese día:
+// se muestran aparte (grupo "Ausencias" del desplegable, color propio y su propio indicador).
+const FUNC_AUSENCIA = { VACACIONES: "#3B82F6", FALTA: "#FF3B4E" };
+const esAusencia = (nombre) => !!nombre && normArea(nombre).replace(/\s+/g, " ") in FUNC_AUSENCIA;
 function colorFunc(nombre){
+  const clave = nombre ? normArea(nombre).replace(/\s+/g, " ") : "";
+  if(clave in FUNC_AUSENCIA) return FUNC_AUSENCIA[clave];
   const f = funcionesCat.find(x => x.nombre === nombre);
   return f ? FUNC_PALETA[Number(f.id) % FUNC_PALETA.length] : "#7C8496";
 }
@@ -1815,8 +1863,13 @@ function pkFilasTabla(vis){
 }
 function pkOpcionesFunc(actual){
   const activas = funcionesCat.filter(f => f.activo);
-  let h = `<option value="">— Sin asignar —</option>` +
-    activas.map(f => `<option value="${escHtml(f.nombre)}"${f.nombre === actual ? " selected" : ""}>${escHtml(f.nombre)}</option>`).join("");
+  const opt = (f) => `<option value="${escHtml(f.nombre)}"${f.nombre === actual ? " selected" : ""}>${escHtml(f.nombre)}</option>`;
+  const trabajo = activas.filter(f => !esAusencia(f.nombre)), ausencias = activas.filter(f => esAusencia(f.nombre));
+  let h = `<option value="">— Sin asignar —</option>`;
+  // Con un solo grupo no hace falta separar; con ambos, "Ausencias" va aparte para no confundirlas con una función.
+  h += ausencias.length && trabajo.length
+    ? `<optgroup label="Función">${trabajo.map(opt).join("")}</optgroup><optgroup label="Ausencia">${ausencias.map(opt).join("")}</optgroup>`
+    : activas.map(opt).join("");
   if(actual && !activas.some(f => f.nombre === actual)) h += `<option value="${escHtml(actual)}" selected>${escHtml(actual)} (inactiva)</option>`;
   return h;
 }
@@ -2054,13 +2107,17 @@ function pintarPicking(){
     : `Áreas de picking: <strong>${escHtml(pkAreasTexto())}</strong>${fuera ? ` · hay ${fuera} personas de otras áreas que no se listan` : ""}. ${PK_ROLES_CONFIG.includes(session.rol) ? "Puedes cambiar las áreas en Configuración." : ""}`;
 
   // KPIs
-  const conF = vis.filter(p => p.funcion).length;
-  const sin = vis.length - conF;
+  // Con función = trabaja en algo; Vacaciones/Falta se cuentan aparte; Sin asignar = todavía no se registró nada.
+  const conF = vis.filter(p => p.funcion && !esAusencia(p.funcion)).length;
+  const nVac = vis.filter(p => esAusencia(p.funcion) && normArea(p.funcion) === "VACACIONES").length;
+  const nFalta = vis.filter(p => esAusencia(p.funcion) && normArea(p.funcion) === "FALTA").length;
+  const sin = vis.length - conF - nVac - nFalta;
   const presSin = vis.filter(p => p.ingreso && !p.funcion).length;
-  const pct = vis.length ? Math.round(conF / vis.length * 100) : 0;
+  const pct = vis.length ? Math.round((vis.length - sin) / vis.length * 100) : 0;
   document.getElementById("pk-kpis").innerHTML =
     kpiTile("Colaboradores", vis.length, [pk.turno ? "turno " + pkEtiquetaTurno().toLowerCase() : "", pk.sup ? "de este supervisor" : (filtros.area || filtros.zona) ? etiquetaFiltro("") : ""].filter(Boolean).join(" · ") || "activos", "#3B82F6", "👥") +
-    kpiTile("Con función", conF, pct + "% asignado", "#22C55E", "✅") +
+    kpiTile("Con función", conF, pct + "% con registro", "#22C55E", "✅") +
+    kpiTile("Vacaciones / Falta", nVac + nFalta, `${nVac} vacaciones · ${nFalta} falta${nFalta === 1 ? "" : "s"}`, nFalta ? "#FF3B4E" : "#3B82F6", "🏖️") +
     kpiTile("Sin asignar", sin, "falta definir su función", sin ? "#F5A623" : "#22C55E", "⏳") +
     kpiTile("Presentes sin función", presSin, "ya marcaron ingreso", presSin ? "#FF3B4E" : "#22C55E", "⚠️");
 
@@ -2435,8 +2492,10 @@ function pintarCopiarPicking(){
 async function copiarPickingAnterior(){
   const ant = pkFechaAnterior();
   if(!ant || !pkEditable()) return;
-  const dnis = pkFilasTabla(pkPorSupervisor(pkBase())).filter(p => !p.funcion).map(p => p.dni);
-  if(!dnis.length){ toast("En la lista no hay nadie sin función."); return; }
+  // Una falta es de ese día: no se arrastra al siguiente (las vacaciones sí continúan, se pueden ajustar luego).
+  const faltaAntes = new Set(pk.hist.rows.filter(r => r.fecha === ant && normArea(r.funcion) === "FALTA").map(r => r.dni));
+  const dnis = pkFilasTabla(pkPorSupervisor(pkBase())).filter(p => !p.funcion && !faltaAntes.has(p.dni)).map(p => p.dni);
+  if(!dnis.length){ toast("En la lista no hay nadie sin función a quien copiar."); return; }
   const btn = document.getElementById("pk-copiar");
   btn.disabled = true;
   const fecha = pk.fecha;
@@ -2568,6 +2627,7 @@ function pintarConfig(){
         <ul class="cfg-lista">
           <li><strong>Desactivar</strong> una función la quita del desplegable pero conserva el historial de quienes ya la tuvieron.</li>
           <li><strong>Renombrar</strong> corrige también las asignaciones ya guardadas (útil para arreglar una tilde o un error de tipeo).</li>
+          <li><strong>Vacaciones</strong> y <strong>Falta</strong> son opciones de ausencia: aparecen aparte en el desplegable y tienen su propio indicador. Una falta no se copia al día siguiente.</li>
           <li>Las <strong>zonas</strong> de picking (Mezzanine, Estantería, Knapp) siguen asignándose en Personal → Editar; no son lo mismo que la función diaria.</li>
           <li>Pueden asignar funciones: Administrador, Gestión Humana, Coordinador y Supervisor. Gerencia solo consulta.</li>
         </ul>
