@@ -230,6 +230,64 @@
   .picking-tile .zring{width:44px;height:44px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;
     font-family:var(--mono);font-size:11px;font-weight:800;}
   .picking-title{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:700;margin:0 0 8px;}
+
+  /* ============ Picking: funcion diaria del personal ============ */
+  .pk-controls{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px;}
+  .pk-field{display:flex;flex-direction:column;gap:5px;}
+  .pk-field.grow{flex:1;min-width:200px;}
+  .pk-field > label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:700;}
+  .pk-field input,.pk-field select{background:var(--panel-alt);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 11px;font-size:12.5px;}
+  .pk-field input:focus,.pk-field select:focus{outline:none;border-color:var(--red);}
+  .pk-fecha-row{display:flex;gap:6px;align-items:center;}
+  .pk-fecha-row .btn-sm{padding:8px 11px;}
+  .pk-check{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-soft);padding-bottom:9px;cursor:pointer;white-space:nowrap;}
+  .pk-check input{accent-color:var(--red);}
+  .pk-nota{margin:12px 0 0;font-size:12px;color:var(--muted);line-height:1.5;}
+  .pk-nota.warn{color:var(--amber);}
+  .pk-dist-bar{display:flex;height:12px;border-radius:999px;overflow:hidden;background:var(--panel-alt);border:1px solid var(--border-soft);margin:8px 0 14px;}
+  .pk-dist-bar span{display:block;height:100%;}
+  .pk-chips{display:flex;flex-wrap:wrap;gap:8px;}
+  .pk-chip{display:inline-flex;align-items:center;gap:8px;background:var(--panel-alt);border:1px solid var(--border);border-radius:999px;
+    padding:6px 13px;font-size:12.5px;color:var(--text);cursor:pointer;}
+  .pk-chip i{width:9px;height:9px;border-radius:50%;background:var(--c);flex-shrink:0;}
+  .pk-chip b{font-family:var(--mono);}
+  .pk-chip small{color:var(--muted);}
+  .pk-chip:hover{border-color:var(--c);}
+  .pk-chip.on{border-color:var(--c);box-shadow:inset 0 0 0 1px var(--c);font-weight:700;}
+  .pk-bulk{display:flex;flex-wrap:wrap;align-items:center;gap:10px;background:var(--red-tint);border:1px solid var(--red-dim);
+    border-radius:10px;padding:9px 13px;margin-bottom:12px;font-size:12.5px;}
+  .pk-bulk select{background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 9px;font-size:12.5px;}
+  .pk-tabla td,.pk-tabla th{padding:8px 10px;}
+  .pk-tabla tr.sin-func{box-shadow:inset 3px 0 0 var(--amber);}
+  .pk-tabla tr.presente-sin{box-shadow:inset 3px 0 0 var(--red);}
+  .pk-tabla input[type=checkbox]{accent-color:var(--red);width:15px;height:15px;cursor:pointer;}
+  .pk-nombre{display:flex;align-items:center;gap:10px;font-weight:700;}
+  .pk-nombre small{display:block;font-weight:500;color:var(--muted);font-family:var(--mono);font-size:10.5px;}
+  .pk-tabla td.meta{color:var(--muted);font-size:11.5px;}
+  .pk-sel{min-width:150px;padding:6px 8px;border-radius:8px;border:1px solid var(--border);border-left:4px solid var(--c,var(--border));
+    background:var(--panel-alt);color:var(--text);font-size:12.5px;font-weight:600;cursor:pointer;}
+  .pk-sel.vacio{color:var(--muted);font-weight:500;}
+  .pk-sel:focus{outline:none;border-color:var(--red);border-left-color:var(--c,var(--red));}
+  .pk-pill{display:inline-block;padding:3px 11px;border-radius:999px;font-size:11.5px;font-weight:700;white-space:nowrap;}
+  .pk-resumen tbody tr{cursor:pointer;}
+  .pk-resumen tbody tr.on{background:var(--red-tint)!important;}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1A1D23;color:#fff;padding:10px 18px;border-radius:10px;
+    font-size:12.5px;font-weight:600;box-shadow:var(--shadow);z-index:80;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;text-align:center;}
+  .toast.show{opacity:1;}
+  .toast.bad{background:var(--red);}
+
+  /* ============ Configuracion ============ */
+  .cfg-add{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px;}
+  .cfg-add input,.cfg-nombre{background:var(--panel-alt);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 11px;font-size:12.5px;}
+  .cfg-add input{flex:1;min-width:200px;max-width:360px;}
+  .cfg-nombre{width:100%;min-width:170px;}
+  .cfg-add input:focus,.cfg-nombre:focus{outline:none;border-color:var(--red);}
+  .cfg-orden{display:inline-flex;gap:4px;}
+  .cfg-orden .btn-sm{padding:4px 9px;}
+  .cfg-activa{display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;}
+  .cfg-activa input{accent-color:var(--red);width:15px;height:15px;}
+  .cfg-lista{margin:0;padding-left:18px;font-size:12.5px;color:var(--text-soft);line-height:1.7;}
+  tr.cfg-inactiva td:not(:last-child){opacity:.55;}
 </style>
 </head>
 <body>
@@ -261,11 +319,13 @@
 
   <nav id="tabs">
     <button data-tab="vivo" class="active">🟢 En Vivo</button>
+    <button data-tab="picking">📦 Picking</button>
     <button data-tab="ausentismo">📉 Ausentismo</button>
     <button data-tab="rotacion">🔁 Rotación</button>
     <button data-tab="general">📊 Asistencia General</button>
     <button data-tab="personal">🪪 Personal</button>
     <button data-tab="pagos">💰 Pagos</button>
+    <button data-tab="config" id="tab-config" hidden>⚙️ Configuración</button>
   </nav>
 
   <div id="filter-bar">
@@ -285,8 +345,11 @@
     <section class="tab-panel" id="panel-general"></section>
     <section class="tab-panel" id="panel-personal"></section>
     <section class="tab-panel" id="panel-pagos"></section>
+    <section class="tab-panel" id="panel-picking"></section>
+    <section class="tab-panel" id="panel-config"></section>
   </main>
 </div>
+<div class="toast" id="toast" role="status"></div>
 
 <div id="personal-modal">
   <div class="personal-modal-card">
@@ -362,10 +425,27 @@ function fmtFecha(d){ return new Date(d+"T00:00:00").toLocaleDateString("es-PE",
 function todayISO(){ return new Date().toLocaleDateString("sv-SE"); }
 function monthStartISO(){ const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-01`; }
 function money(n){ return "S/ " + (Number(n)||0).toLocaleString("es-PE",{minimumFractionDigits:2,maximumFractionDigits:2}); }
-function humanError(err){
+function humanError(err, extra){
   const code = (err && err.message) ? err.message.replace(/^.*?:\s*/,"").trim() : "";
-  const MSGS = { SIN_PERMISO:"No tienes permiso para esto.", DNI_NO_ENCONTRADO:"DNI no encontrado.", SUELDO_INVALIDO:"Sueldo inválido.", DATOS_INCOMPLETOS:"DNI y nombre son obligatorios." };
+  const MSGS = { SIN_PERMISO:"No tienes permiso para esto.", DNI_NO_ENCONTRADO:"DNI no encontrado.", SUELDO_INVALIDO:"Sueldo inválido.", DATOS_INCOMPLETOS:"DNI y nombre son obligatorios.",
+    FUNCION_DUPLICADA:"Ya existe una función con ese nombre.", FUNCION_INVALIDA:"Esa función no existe o está desactivada.",
+    FUNCION_NO_ENCONTRADA:"La función ya no existe.", FECHA_FUERA_DE_RANGO:"Solo se puede asignar entre 14 días atrás y mañana.", ...extra };
   return MSGS[code] || (err && err.message) || "Error desconocido.";
+}
+const escHtml = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let toastTimer = null;
+function toast(msg, malo){
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.toggle("bad", !!malo);
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), malo ? 4500 : 1800);
+}
+function addDays(iso, n){
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() + n);
+  return d.toLocaleDateString("sv-SE");
 }
 
 /* ================= Sesión / login ================= */
@@ -598,21 +678,27 @@ function renderTabActivo(){
   // el rango de fechas del filtro no aplica ahi, asi que se oculta para
   // no dar a entender que se puede "ver el ayer" en esa pestaña.
   // "Personal" tampoco usa fechas: es la lista de activos de hoy (solo respeta Area y Zona).
+  // "Picking" tiene su propia fecha (un dia a la vez) y "Configuración" no filtra nada.
   const esVivo = tabActivo === "vivo";
-  const sinFechas = esVivo || tabActivo === "personal";
+  const sinFechas = esVivo || ["personal","picking","config"].includes(tabActivo);
   document.getElementById("filter-fechas").classList.toggle("oculto", sinFechas);
+  document.getElementById("filter-bar").hidden = tabActivo === "config";
   const filtrosActivos = (filtros.area || filtros.zona) ? " · " + etiquetaFiltro("") : "";
   document.getElementById("f-hint").textContent = (esVivo
     ? `Hoy, ${new Date().toLocaleDateString("es-PE",{weekday:"long",day:"numeric",month:"long"})} · en vivo`
     : tabActivo === "personal"
       ? "Colaboradores activos hoy"
-      : `${fmtFecha(filtros.desde)} → ${fmtFecha(filtros.hasta)}`) + filtrosActivos;
+      : tabActivo === "picking"
+        ? "Función diaria · " + fmtFecha(pk.fecha || todayISO())
+        : `${fmtFecha(filtros.desde)} → ${fmtFecha(filtros.hasta)}`) + filtrosActivos;
   if(tabActivo === "vivo") renderVivo();
+  else if(tabActivo === "picking") renderPicking();
   else if(tabActivo === "ausentismo") renderAusentismo();
   else if(tabActivo === "rotacion") renderRotacion();
   else if(tabActivo === "general") renderGeneral();
   else if(tabActivo === "personal") renderPersonal();
   else if(tabActivo === "pagos") renderPagos();
+  else if(tabActivo === "config") renderConfig();
 }
 
 /* ================= TAB: En Vivo ================= */
@@ -1545,12 +1631,579 @@ async function renderPagos(){
   });
 }
 
+/* ================= Picking: función diaria del personal =================
+   Cada supervisor asigna a diario qué función cumple su gente (Picking, Embalaje,
+   Troquelado, Shortpick…) para mapear cómo varía la distribución. El catálogo de
+   funciones (desplegable) se administra en la pestaña Configuración. */
+const PK_ROLES_ASIGNAR = ["admin","rrhh","coordinador","supervisor"];
+const PK_ROLES_CONFIG = ["admin","rrhh","coordinador"];
+const SIN_SUP = "__NONE__";   // valor del selector "personal sin supervisor"
+const SIN_FUNC = "__SIN__";   // valor del chip "sin asignar"
+const FUNC_PALETA = ["#3B82F6","#22C55E","#F5A623","#A78BFA","#22D3EE","#FF3B4E","#EC4899","#84CC16","#14B8A6","#F97316"];
+let funcionesCat = [];        // catálogo completo (activas e inactivas), ordenado
+let funcionesError = null;
+const pk = { fecha: null, filas: [], sup: "", supInit: false, supNoEncontrado: false, q: "", soloSin: false, func: "",
+             sel: new Set(), hist: null, histDias: 14, histT: null };
+
+// Una migración sin aplicar se reconoce porque PostgREST no encuentra la función.
+const migracion0013Faltante = (e) => !!e && /PGRST202|Could not find the function|schema cache|42P01|42883/i.test(String(e.code || "") + " " + String(e.message || ""));
+const bannerMigracion0013 = () => `<div class="banner">Falta aplicar la migración <strong>0013_asis_picking_funciones.sql</strong> en Supabase (SQL Editor → pegar el archivo completo → Run). Después recarga esta página.</div>`;
+
+async function cargarFunciones(){
+  try{ funcionesCat = (await rpc("asis_funciones_listar", {})) || []; funcionesError = null; }
+  catch(e){ funcionesCat = []; funcionesError = e; }
+  return !funcionesError;
+}
+function colorFunc(nombre){
+  const f = funcionesCat.find(x => x.nombre === nombre);
+  return f ? FUNC_PALETA[Number(f.id) % FUNC_PALETA.length] : "#7C8496";
+}
+const normNombre = (s) => normArea(s).replace(/\s+/g, " ");
+const tokensNombre = (s) => normNombre(s).split(" ").filter(Boolean);
+// "PEREZ GOMEZ JUAN" y "Juan Perez" son la misma persona: todos los términos del nombre más corto están en el más largo.
+function mismoNombre(a, b){
+  const A = tokensNombre(a), B = tokensNombre(b);
+  if(A.length < 2 || B.length < 2) return normNombre(a) === normNombre(b);
+  const [corto, largo] = A.length <= B.length ? [A, B] : [B, A];
+  return corto.every(t => largo.includes(t));
+}
+function pkEditable(){
+  const hoy = todayISO();
+  return PK_ROLES_ASIGNAR.includes(session.rol) && pk.fecha >= addDays(hoy, -14) && pk.fecha <= addDays(hoy, 1) && funcionesCat.some(f => f.activo);
+}
+function pkSupervisores(){
+  const map = new Map(); let sinSup = 0;
+  pk.filas.forEach(p => {
+    const k = normNombre(p.supervisor);
+    if(!k){ sinSup++; return; }
+    const e = map.get(k) || { label: String(p.supervisor).trim(), n: 0 };
+    e.n++; map.set(k, e);
+  });
+  return { map, sinSup };
+}
+// Area y Zona del filtro global; el supervisor se aplica aparte para poder comparar contra "todos".
+function pkBase(){
+  const areaSel = normArea(filtros.area);
+  return pk.filas.filter(p => (!areaSel || normArea(p.area) === areaSel) && pasaFiltroZona(p.dni));
+}
+function pkPorSupervisor(lista){
+  if(!pk.sup) return lista;
+  if(pk.sup === SIN_SUP) return lista.filter(p => !normNombre(p.supervisor));
+  return lista.filter(p => normNombre(p.supervisor) === pk.sup);
+}
+function pkFilasTabla(vis){
+  const q = pk.q.toLowerCase().trim();
+  return vis.filter(p =>
+    (!pk.soloSin || !p.funcion) &&
+    (!pk.func || (pk.func === SIN_FUNC ? !p.funcion : p.funcion === pk.func)) &&
+    (!q || [p.nombre, p.dni, p.puesto, p.area, p.supervisor, p.funcion, zonasTexto(p.dni)].some(v => (v || "").toLowerCase().includes(q))));
+}
+function pkOpcionesFunc(actual){
+  const activas = funcionesCat.filter(f => f.activo);
+  let h = `<option value="">— Sin asignar —</option>` +
+    activas.map(f => `<option value="${escHtml(f.nombre)}"${f.nombre === actual ? " selected" : ""}>${escHtml(f.nombre)}</option>`).join("");
+  if(actual && !activas.some(f => f.nombre === actual)) h += `<option value="${escHtml(actual)}" selected>${escHtml(actual)} (inactiva)</option>`;
+  return h;
+}
+
+async function renderPicking(){
+  const gen = renderGen;
+  const panel = document.getElementById("panel-picking");
+  panel.innerHTML = `<div class="loading">Cargando…</div>`;
+  if(!pk.fecha) pk.fecha = todayISO();
+  let filas;
+  try{
+    [, filas] = await Promise.all([cargarFunciones(), rpc("asis_picking_dia", { p_fecha: pk.fecha })]);
+  }catch(e){
+    if(gen !== renderGen) return;
+    panel.innerHTML = migracion0013Faltante(e) ? bannerMigracion0013() : `<div class="loading">Error: ${escHtml(humanError(e))}</div>`;
+    return;
+  }
+  if(gen !== renderGen) return;
+  if(funcionesError){
+    panel.innerHTML = migracion0013Faltante(funcionesError) ? bannerMigracion0013() : `<div class="loading">Error: ${escHtml(humanError(funcionesError))}</div>`;
+    return;
+  }
+  pk.filas = filas || [];
+  registrarAreas(pk.filas);
+  pk.hist = null;
+  pk.sel.clear();
+
+  // Un supervisor entra con su propia gente ya seleccionada (se reconoce su nombre en el censo); el resto ve "todos".
+  const sups = pkSupervisores();
+  if(!pk.supInit){
+    pk.supInit = true;
+    if(session.rol === "supervisor"){
+      const mio = [...sups.map.keys()].find(k => mismoNombre(session.nombre, k));
+      if(mio) pk.sup = mio; else pk.supNoEncontrado = true;
+    }
+  }
+  if(pk.sup && pk.sup !== SIN_SUP && !sups.map.has(pk.sup)) pk.sup = "";
+
+  const supOpts = `<option value="">Todos los supervisores</option>` +
+    [...sups.map.entries()].sort((a, b) => a[1].label.localeCompare(b[1].label, "es"))
+      .map(([k, v]) => `<option value="${escHtml(k)}">${escHtml(v.label)} (${v.n})</option>`).join("") +
+    (sups.sinSup ? `<option value="${SIN_SUP}">(Sin supervisor) (${sups.sinSup})</option>` : "");
+
+  panel.innerHTML = `
+    <div class="card">
+      <div class="pk-controls">
+        <div class="pk-field"><label>Fecha</label>
+          <div class="pk-fecha-row">
+            <button class="btn-sm" id="pk-prev" type="button" title="Día anterior">‹</button>
+            <input type="date" id="pk-fecha" value="${pk.fecha}">
+            <button class="btn-sm" id="pk-next" type="button" title="Día siguiente">›</button>
+            <button class="btn-sm" id="pk-hoy" type="button">Hoy</button>
+          </div></div>
+        <div class="pk-field"><label>Supervisor</label><select id="pk-sup">${supOpts}</select></div>
+        <div class="pk-field grow"><label>Buscar</label><input type="text" id="pk-buscar" placeholder="Nombre, DNI, puesto, área o función…" value="${escHtml(pk.q)}"></div>
+        <label class="pk-check"><input type="checkbox" id="pk-solo-sin" ${pk.soloSin ? "checked" : ""}>Solo sin asignar</label>
+        <button class="btn-sm" id="pk-copiar" type="button" disabled>📋 Copiar día anterior</button>
+        <button class="btn-sm" id="pk-exportar" type="button">⬇ Excel</button>
+      </div>
+      <p class="pk-nota" id="pk-nota"></p>
+    </div>
+    <div class="kpi-grid" id="pk-kpis"></div>
+    <div class="card">
+      <h3>Distribución del día</h3>
+      <p class="hint">Toca una función para filtrar la lista; vuelve a tocarla para quitar el filtro.</p>
+      <div id="pk-dist"></div>
+    </div>
+    <div class="card">
+      <div class="card-header-row">
+        <div><h3>Asignación por colaborador</h3>
+          <p class="hint" id="pk-tabla-hint"></p></div>
+      </div>
+      <div class="pk-bulk" id="pk-bulk" hidden>
+        <b id="pk-bulk-n">0</b><span>seleccionados</span>
+        <select id="pk-bulk-func">${pkOpcionesFunc("")}</select>
+        <button class="btn-sm primary" id="pk-bulk-asignar" type="button">Asignar</button>
+        <button class="btn-sm" id="pk-bulk-quitar" type="button">Quitar función</button>
+        <button class="btn-sm" id="pk-bulk-limpiar" type="button">Deseleccionar</button>
+      </div>
+      <div class="table-scroll" id="pk-tabla" style="max-height:560px;"></div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-header-row">
+          <div><h3>Evolución de la distribución</h3>
+            <p class="hint" id="pk-hist-hint">Personas por función, día a día (aplica Área, Zona y Supervisor).</p></div>
+          <select id="pk-hist-dias" class="btn-sm">
+            <option value="7">7 días</option><option value="14">14 días</option><option value="30">30 días</option>
+          </select>
+        </div>
+        <div class="chart-box tall" id="pk-hist-box"><canvas id="ch-pk-hist"></canvas></div>
+        <div class="feed-empty" id="pk-hist-msg" hidden></div>
+      </div>
+      <div class="card">
+        <h3>Resumen por supervisor</h3>
+        <p class="hint">Quién ya asignó y quién falta. Toca un supervisor para ver solo su gente.</p>
+        <div class="table-scroll pk-resumen" id="pk-resumen" style="max-height:360px;"></div>
+      </div>
+    </div>
+  `;
+  document.getElementById("pk-sup").value = pk.sup;
+  document.getElementById("pk-hist-dias").value = String(pk.histDias);
+  destroyChart("pkHist");
+  pkEnlazarEventos();
+  pintarPicking();
+  cargarHistorialPicking(gen);
+}
+
+function pkEnlazarEventos(){
+  const el = (id) => document.getElementById(id);
+  const ir = (f) => { pk.fecha = f || todayISO(); renderTabActivo(); };
+  el("pk-fecha").addEventListener("change", (e) => ir(e.target.value));
+  el("pk-prev").addEventListener("click", () => ir(addDays(pk.fecha, -1)));
+  el("pk-next").addEventListener("click", () => ir(addDays(pk.fecha, 1)));
+  el("pk-hoy").addEventListener("click", () => ir(todayISO()));
+  el("pk-sup").addEventListener("change", (e) => { pk.sup = e.target.value; pk.sel.clear(); pintarPicking(); pintarHistorialPicking(); });
+  el("pk-buscar").addEventListener("input", (e) => { pk.q = e.target.value; pintarPicking(); });
+  el("pk-solo-sin").addEventListener("change", (e) => { pk.soloSin = e.target.checked; pintarPicking(); });
+  el("pk-exportar").addEventListener("click", exportarPickingExcel);
+  el("pk-copiar").addEventListener("click", copiarPickingAnterior);
+  el("pk-hist-dias").addEventListener("change", (e) => { pk.histDias = Number(e.target.value) || 14; pintarHistorialPicking(); });
+
+  el("pk-dist").addEventListener("click", (e) => {
+    const chip = e.target.closest(".pk-chip"); if(!chip) return;
+    pk.func = pk.func === chip.dataset.func ? "" : chip.dataset.func;
+    pintarPicking();
+  });
+  el("pk-resumen").addEventListener("click", (e) => {
+    const tr = e.target.closest("tr[data-sup]"); if(!tr) return;
+    pk.sup = pk.sup === tr.dataset.sup ? "" : tr.dataset.sup;
+    el("pk-sup").value = pk.sup; pk.sel.clear();
+    pintarPicking(); pintarHistorialPicking();
+  });
+  el("pk-tabla").addEventListener("change", (e) => {
+    const t = e.target;
+    if(t.classList.contains("pk-sel")) pkAsignar([t.dataset.dni], t.value);
+    else if(t.classList.contains("pk-chk")){ t.checked ? pk.sel.add(t.dataset.dni) : pk.sel.delete(t.dataset.dni); pintarPickingBulk(); pintarPickingEncabezado(); }
+    else if(t.id === "pk-all"){
+      pkFilasTabla(pkPorSupervisor(pkBase())).forEach(p => t.checked ? pk.sel.add(p.dni) : pk.sel.delete(p.dni));
+      pintarPicking();
+    }
+  });
+  el("pk-bulk-asignar").addEventListener("click", () => {
+    const f = el("pk-bulk-func").value;
+    if(!f){ toast("Elige la función que quieres asignar.", true); return; }
+    pkAsignar([...pk.sel], f);
+  });
+  el("pk-bulk-quitar").addEventListener("click", () => pkAsignar([...pk.sel], ""));
+  el("pk-bulk-limpiar").addEventListener("click", () => { pk.sel.clear(); pintarPicking(); });
+}
+
+// Repinta todo lo que depende de los datos (sin tocar los controles, para no perder el foco al escribir).
+function pintarPicking(){
+  if(tabActivo !== "picking" || !document.getElementById("pk-tabla")) return;
+  const editable = pkEditable();
+  const base = pkBase();
+  const vis = pkPorSupervisor(base);
+  const filasTabla = pkFilasTabla(vis);
+  const visDni = new Set(filasTabla.map(p => p.dni));
+  [...pk.sel].forEach(d => { if(!visDni.has(d)) pk.sel.delete(d); });   // no actuar sobre filas que ya no se ven
+
+  const hoy = todayISO();
+  document.getElementById("f-hint").textContent = "Función diaria · " + fmtFecha(pk.fecha) + ((filtros.area || filtros.zona) ? " · " + etiquetaFiltro("") : "");
+
+  // Nota contextual (por qué no se puede editar, o cómo encontrar a su gente).
+  const nota = document.getElementById("pk-nota");
+  let msg = "", warn = false;
+  if(!PK_ROLES_ASIGNAR.includes(session.rol)){ msg = `Tu rol (${ROLE_LABELS[session.rol] || session.rol}) puede consultar la distribución, pero no asignar funciones.`; }
+  else if(pk.fecha < addDays(hoy, -14) || pk.fecha > addDays(hoy, 1)){ msg = "Este día es de solo lectura: se puede asignar desde 14 días atrás hasta mañana."; warn = true; }
+  else if(!funcionesCat.some(f => f.activo)){ msg = "No hay funciones activas. Agrégalas en la pestaña Configuración."; warn = true; }
+  else if(pk.supNoEncontrado && !pk.sup){ msg = `No encontramos «${escHtml(session.nombre)}» entre los supervisores del censo. Elige tu nombre en el selector Supervisor.`; warn = true; }
+  else if(pk.fecha > hoy){ msg = "Estás planificando para mañana."; }
+  else { msg = "Elige la función de cada persona: se guarda al instante. Para varias a la vez, marca las casillas y usa la barra roja."; }
+  nota.innerHTML = msg; nota.classList.toggle("warn", warn);
+
+  // KPIs
+  const conF = vis.filter(p => p.funcion).length;
+  const sin = vis.length - conF;
+  const presSin = vis.filter(p => p.ingreso && !p.funcion).length;
+  const pct = vis.length ? Math.round(conF / vis.length * 100) : 0;
+  document.getElementById("pk-kpis").innerHTML =
+    kpiTile("Colaboradores", vis.length, pk.sup ? "de este supervisor" : etiquetaFiltro("activos"), "#3B82F6", "👥") +
+    kpiTile("Con función", conF, pct + "% asignado", "#22C55E", "✅") +
+    kpiTile("Sin asignar", sin, "falta definir su función", sin ? "#F5A623" : "#22C55E", "⏳") +
+    kpiTile("Presentes sin función", presSin, "ya marcaron ingreso", presSin ? "#FF3B4E" : "#22C55E", "⚠️");
+
+  // Distribución (barra segmentada + chips filtrables)
+  const conteo = new Map();
+  vis.forEach(p => { if(p.funcion) conteo.set(p.funcion, (conteo.get(p.funcion) || 0) + 1); });
+  const items = funcionesCat.filter(f => f.activo || conteo.has(f.nombre))
+    .map(f => ({ key: f.nombre, label: f.nombre + (f.activo ? "" : " (inactiva)"), n: conteo.get(f.nombre) || 0, color: colorFunc(f.nombre) }));
+  [...conteo.keys()].filter(k => !items.some(i => i.key === k)).forEach(k => items.push({ key: k, label: k, n: conteo.get(k), color: colorFunc(k) }));
+  items.push({ key: SIN_FUNC, label: "Sin asignar", n: sin, color: "#9CA3AF" });
+  const total = vis.length;
+  document.getElementById("pk-dist").innerHTML = !total
+    ? `<div class="feed-empty">${(filtros.area || filtros.zona || pk.sup) ? "Nadie cumple el filtro actual." : "No hay colaboradores activos en esta fecha."}</div>`
+    : `<div class="pk-dist-bar">${items.filter(i => i.n).map(i => `<span style="width:${i.n / total * 100}%;background:${i.color};" title="${escHtml(i.label)}: ${i.n}"></span>`).join("")}</div>
+       <div class="pk-chips">${items.map(i => `<button type="button" class="pk-chip${pk.func === i.key ? " on" : ""}" data-func="${escHtml(i.key)}" style="--c:${i.color};">
+         <i></i>${escHtml(i.label)} <b>${i.n}</b> <small>${Math.round(i.n / total * 100)}%</small></button>`).join("")}</div>`;
+
+  // Tabla
+  const cont = document.getElementById("pk-tabla");
+  const scroll = cont.scrollTop;
+  const optCache = {};
+  const opts = (a) => optCache[a || ""] || (optCache[a || ""] = pkOpcionesFunc(a));
+  document.getElementById("pk-tabla-hint").textContent =
+    `${filasTabla.length} de ${vis.length} colaboradores${pk.func ? " · filtrando por " + (pk.func === SIN_FUNC ? "«sin asignar»" : "«" + pk.func + "»") : ""}.`;
+  if(!filasTabla.length){
+    cont.innerHTML = `<div class="feed-empty">${vis.length ? "Sin resultados con estos filtros." : "No hay colaboradores activos que mostrar."}</div>`;
+  }else{
+    cont.innerHTML = `<table class="pk-tabla"><thead><tr>
+        ${editable ? `<th style="width:34px;"><input type="checkbox" id="pk-all" title="Seleccionar todos los visibles"></th>` : ""}
+        <th>Colaborador</th><th>Puesto</th><th>Área · Turno</th><th>Zona</th><th>Supervisor</th><th>Ingreso</th><th>Función</th>
+      </tr></thead><tbody>${filasTabla.map(p => {
+        const c = p.funcion ? colorFunc(p.funcion) : "";
+        const quien = p.funcion && p.asignado_por ? `Asignado por ${p.asignado_por}${p.asignado_en ? " · " + fmtHora(p.asignado_en) : ""}` : "";
+        return `<tr class="${!p.funcion ? (p.ingreso ? "presente-sin" : "sin-func") : ""}">
+          ${editable ? `<td><input type="checkbox" class="pk-chk" data-dni="${escHtml(p.dni)}" ${pk.sel.has(p.dni) ? "checked" : ""}></td>` : ""}
+          <td><div class="pk-nombre">${avatarHtml(p.nombre)}<span>${escHtml(p.nombre)}<small>${escHtml(p.dni)}</small></span></div></td>
+          <td class="meta">${escHtml(p.puesto) || "—"}</td>
+          <td class="meta">${escHtml([p.area, p.turno].filter(Boolean).join(" · ")) || "—"}</td>
+          <td>${zonasBadges(p.dni)}</td>
+          <td class="meta">${escHtml(p.supervisor) || "—"}</td>
+          <td>${p.ingreso ? celdaHora(p.ingreso, "ingreso") : `<span class="hora-pendiente">—</span>`}</td>
+          <td>${editable
+            ? `<select class="pk-sel${p.funcion ? "" : " vacio"}" data-dni="${escHtml(p.dni)}" style="--c:${c || "var(--border)"};" title="${escHtml(quien)}">${opts(p.funcion)}</select>`
+            : (p.funcion ? `<span class="pk-pill" style="background:${c}22;color:${c};" title="${escHtml(quien)}">${escHtml(p.funcion)}</span>` : `<span class="hora-pendiente">—</span>`)}</td>
+        </tr>`;
+      }).join("")}</tbody></table>`;
+  }
+  cont.scrollTop = scroll;
+  pintarPickingBulk(); pintarPickingEncabezado();
+
+  // Resumen por supervisor (respeta Área y Zona, pero no el selector de supervisor: es el tablero para compararlos)
+  const grupos = new Map();
+  base.forEach(p => {
+    const k = normNombre(p.supervisor) || SIN_SUP;
+    const g = grupos.get(k) || { label: k === SIN_SUP ? "(Sin supervisor)" : String(p.supervisor).trim(), total: 0, sin: 0, por: {} };
+    g.total++; if(p.funcion){ g.por[p.funcion] = (g.por[p.funcion] || 0) + 1; } else g.sin++;
+    grupos.set(k, g);
+  });
+  const usadas = new Set(); grupos.forEach(g => Object.keys(g.por).forEach(f => usadas.add(f)));
+  const cols = funcionesCat.filter(f => f.activo || usadas.has(f.nombre));
+  const ordenados = [...grupos.entries()].sort((a, b) => b[1].sin - a[1].sin || a[1].label.localeCompare(b[1].label, "es"));
+  document.getElementById("pk-resumen").innerHTML = !ordenados.length ? `<div class="feed-empty">Sin datos.</div>` :
+    `<table><thead><tr><th>Supervisor</th>${cols.map(f => `<th class="num" style="color:${colorFunc(f.nombre)};">${escHtml(f.nombre)}</th>`).join("")}
+      <th class="num">Sin asignar</th><th class="num">Total</th><th class="num">% asignado</th></tr></thead>
+     <tbody>${ordenados.map(([k, g]) => `<tr data-sup="${escHtml(k)}" class="${pk.sup === k ? "on" : ""}">
+        <td style="font-weight:700;">${escHtml(g.label)}</td>
+        ${cols.map(f => `<td class="num">${g.por[f.nombre] || `<span class="hora-pendiente">·</span>`}</td>`).join("")}
+        <td class="num" style="${g.sin ? "color:var(--amber);font-weight:800;" : ""}">${g.sin}</td>
+        <td class="num">${g.total}</td>
+        <td class="num">${Math.round((g.total - g.sin) / g.total * 100)}%</td></tr>`).join("")}</tbody></table>`;
+  pintarCopiarPicking();
+}
+function pintarPickingBulk(){
+  const bar = document.getElementById("pk-bulk"); if(!bar) return;
+  const editable = pkEditable();
+  bar.hidden = !editable || pk.sel.size === 0;
+  document.getElementById("pk-bulk-n").textContent = pk.sel.size;
+}
+function pintarPickingEncabezado(){
+  const all = document.getElementById("pk-all"); if(!all) return;
+  const filas = pkFilasTabla(pkPorSupervisor(pkBase()));
+  all.checked = filas.length > 0 && filas.every(p => pk.sel.has(p.dni));
+}
+
+// Guarda la función de uno o varios colaboradores. Se refleja al instante en pantalla y, si el
+// servidor rechaza el cambio, se deshace y se avisa (nunca queda algo "guardado" que no lo está).
+async function pkAsignar(dnis, funcion){
+  dnis = [...new Set(dnis)].filter(Boolean);
+  if(!dnis.length) return;
+  const fecha = pk.fecha;
+  const previo = new Map();
+  pk.filas.forEach(p => { if(dnis.includes(p.dni)) previo.set(p.dni, { funcion: p.funcion, asignado_por: p.asignado_por, asignado_en: p.asignado_en }); });
+  const aplicar = (fn) => { if(pk.fecha === fecha) pk.filas.forEach(p => { if(previo.has(p.dni)) fn(p); }); };
+  aplicar(p => { p.funcion = funcion || null; p.asignado_por = funcion ? session.nombre : null; p.asignado_en = funcion ? new Date().toISOString() : null; });
+  dnis.forEach(d => pk.sel.delete(d));   // lo ya asignado sale de la selección; el resto se mantiene
+  pintarPicking();
+  try{
+    await rpc("asis_picking_asignar", { p_fecha: fecha, p_dnis: dnis, p_funcion: funcion || null });
+    if(pk.hist && pk.fecha === fecha){
+      const s = new Set(dnis);
+      pk.hist.rows = pk.hist.rows.filter(r => !(r.fecha === fecha && s.has(r.dni)));
+      if(funcion) dnis.forEach(d => pk.hist.rows.push({ dni: d, fecha, funcion }));
+      clearTimeout(pk.histT); pk.histT = setTimeout(pintarHistorialPicking, 150);
+    }
+    toast(funcion ? (dnis.length > 1 ? `${dnis.length} colaboradores → ${funcion}` : `Guardado: ${funcion}`) : (dnis.length > 1 ? `Se quitó la función a ${dnis.length}` : "Función quitada"));
+  }catch(e){
+    aplicar(p => { Object.assign(p, previo.get(p.dni)); });
+    pintarPicking();
+    toast("No se pudo guardar: " + humanError(e), true);
+  }
+}
+
+// Historial: se carga aparte (no bloquea la pantalla) y se mantiene al día con cada asignación.
+async function cargarHistorialPicking(gen){
+  const hasta = pk.fecha, desde = addDays(hasta, -29);
+  try{
+    const rows = await rpc("asis_picking_rango", { p_desde: desde, p_hasta: hasta });
+    if(gen !== renderGen) return;
+    pk.hist = { rows: rows || [] };
+  }catch(e){
+    if(gen !== renderGen) return;
+    console.warn("asis_picking_rango:", e && e.message ? e.message : e);
+    const msg = document.getElementById("pk-hist-msg");
+    if(msg){ msg.hidden = false; msg.textContent = "No se pudo cargar el historial."; document.getElementById("pk-hist-box").hidden = true; }
+    return;
+  }
+  pintarHistorialPicking();
+  pintarCopiarPicking();
+}
+function pintarHistorialPicking(){
+  const box = document.getElementById("pk-hist-box"), msg = document.getElementById("pk-hist-msg");
+  if(!box || tabActivo !== "picking") return;
+  if(!pk.hist){ box.hidden = true; msg.hidden = false; msg.textContent = "Cargando historial…"; return; }
+  const dias = pk.histDias;
+  const fechas = Array.from({ length: dias }, (_, i) => addDays(pk.fecha, i - (dias - 1)));
+  const filtrando = pk.sup || filtros.area || filtros.zona;
+  const dniSet = filtrando ? new Set(pkPorSupervisor(pkBase()).map(p => p.dni)) : null;
+  const cuenta = {}; let total = 0;
+  pk.hist.rows.forEach(r => {
+    if(r.fecha < fechas[0] || r.fecha > pk.fecha || (dniSet && !dniSet.has(r.dni))) return;
+    if(!cuenta[r.funcion]) cuenta[r.funcion] = {};
+    cuenta[r.funcion][r.fecha] = (cuenta[r.funcion][r.fecha] || 0) + 1; total++;
+  });
+  destroyChart("pkHist");
+  if(!total){
+    box.hidden = true; msg.hidden = false;
+    msg.textContent = "Todavía no hay funciones asignadas en estos días" + (filtrando ? " para el filtro actual." : ".");
+    return;
+  }
+  box.hidden = false; msg.hidden = true;
+  const nombres = [...funcionesCat.map(f => f.nombre).filter(n => cuenta[n]), ...Object.keys(cuenta).filter(n => !funcionesCat.some(f => f.nombre === n))];
+  const { grid, ticks } = ejesChartTema();
+  charts.pkHist = new Chart(document.getElementById("ch-pk-hist"), {
+    type: "bar",
+    data: { labels: fechas.map(fmtFecha), datasets: nombres.map(n => ({
+      label: n, data: fechas.map(f => (cuenta[n] && cuenta[n][f]) || 0), backgroundColor: colorFunc(n), borderRadius: 3, stack: "dia" })) },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: "bottom", labels: { color: ticks.color, boxWidth: 10, font: { size: 11 } } },
+                 datalabels: { color: "#fff", anchor: "center", align: "center", font: { size: 10, weight: "700" } } },
+      scales: { x: { stacked: true, grid: { display: false }, ticks }, y: { stacked: true, beginAtZero: true, grid, ticks } } }
+  });
+}
+
+// "Copiar día anterior": toma el último día previo que tenga asignaciones (así sirve también tras un domingo o feriado)
+// y se las aplica solo a quienes ves en la lista y todavía no tienen función.
+function pkFechaAnterior(){
+  if(!pk.hist) return null;
+  let ant = null;
+  pk.hist.rows.forEach(r => { if(r.fecha < pk.fecha && (!ant || r.fecha > ant)) ant = r.fecha; });
+  return ant;
+}
+function pintarCopiarPicking(){
+  const btn = document.getElementById("pk-copiar"); if(!btn) return;
+  const ant = pkFechaAnterior();
+  btn.disabled = !pkEditable() || !ant;
+  btn.textContent = ant ? `📋 Copiar de ${fmtFecha(ant)}` : "📋 Copiar día anterior";
+  btn.title = !pk.hist ? "Cargando historial…" : ant ? "Repite las funciones de ese día en quienes aún no tienen una (solo los que ves en la lista)" : "No hay asignaciones en los días anteriores";
+}
+async function copiarPickingAnterior(){
+  const ant = pkFechaAnterior();
+  if(!ant || !pkEditable()) return;
+  const dnis = pkFilasTabla(pkPorSupervisor(pkBase())).filter(p => !p.funcion).map(p => p.dni);
+  if(!dnis.length){ toast("En la lista no hay nadie sin función."); return; }
+  const btn = document.getElementById("pk-copiar");
+  btn.disabled = true;
+  const fecha = pk.fecha;
+  try{
+    const r = await rpc("asis_picking_copiar", { p_desde: ant, p_hasta: fecha, p_dnis: dnis });
+    const n = (r && r.copiados) || 0;
+    if(pk.fecha !== fecha) return;
+    toast(n ? `Se copiaron ${n} funciones de ${fmtFecha(ant)}` : `Nadie de la lista tenía función el ${fmtFecha(ant)}`);
+    const gen = renderGen;
+    const [filas, rows] = await Promise.all([rpc("asis_picking_dia", { p_fecha: fecha }), rpc("asis_picking_rango", { p_desde: addDays(fecha, -29), p_hasta: fecha })]);
+    if(gen !== renderGen || pk.fecha !== fecha) return;
+    pk.filas = filas || []; registrarAreas(pk.filas); pk.hist = { rows: rows || [] };
+    pintarPicking(); pintarHistorialPicking();
+  }catch(e){
+    toast("No se pudo copiar: " + humanError(e), true);
+    pintarCopiarPicking();
+  }
+}
+
+function exportarPickingExcel(){
+  const filas = pkFilasTabla(pkPorSupervisor(pkBase()));
+  if(!filas.length){ toast("No hay filas para exportar.", true); return; }
+  const rows = filas.map(p => ({
+    Fecha: pk.fecha, DNI: p.dni, Colaborador: p.nombre, Puesto: p.puesto || "", Área: p.area || "", Turno: p.turno || "",
+    "Zona picking": zonasTexto(p.dni), Supervisor: p.supervisor || "", Función: p.funcion || "(sin asignar)",
+    Ingreso: p.ingreso ? fmtHora(p.ingreso) : "", "Asignado por": p.asignado_por || "",
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Picking");
+  XLSX.writeFile(wb, `picking_${pk.fecha}.xlsx`);
+}
+
+/* ================= TAB: Configuración (catálogo de funciones) ================= */
+async function renderConfig(){
+  const gen = renderGen;
+  const panel = document.getElementById("panel-config");
+  if(!PK_ROLES_CONFIG.includes(session.rol)){
+    panel.innerHTML = `<div class="banner">Tu rol (${escHtml(ROLE_LABELS[session.rol] || session.rol)}) no puede cambiar la configuración. Pídeselo a Administración, Gestión Humana o un Coordinador.</div>`;
+    return;
+  }
+  panel.innerHTML = `<div class="loading">Cargando…</div>`;
+  const ok = await cargarFunciones();
+  if(gen !== renderGen) return;
+  if(!ok){
+    panel.innerHTML = migracion0013Faltante(funcionesError) ? bannerMigracion0013() : `<div class="loading">Error: ${escHtml(humanError(funcionesError))}</div>`;
+    return;
+  }
+  pintarConfig();
+}
+function pintarConfig(){
+  const panel = document.getElementById("panel-config");
+  const lista = funcionesCat;
+  panel.innerHTML = `
+    <div class="grid-2">
+      <div class="card">
+        <h3>Funciones de picking</h3>
+        <p class="hint">Las <strong>activas</strong> aparecen en el desplegable de la pestaña Picking. Agrega las que necesites; el orden de esta lista es el del desplegable.</p>
+        <div class="cfg-add">
+          <input type="text" id="cfg-nueva" maxlength="40" placeholder="Nueva función (ej. Reabastecimiento)">
+          <button class="btn-sm primary" id="cfg-agregar" type="button">+ Agregar</button>
+        </div>
+        ${lista.length ? `<div class="table-scroll" style="max-height:520px;"><table><thead><tr><th>Orden</th><th>Función</th><th>Estado</th><th></th></tr></thead><tbody>
+          ${lista.map((f, i) => `<tr data-id="${f.id}" class="${f.activo ? "" : "cfg-inactiva"}">
+            <td><span class="cfg-orden">
+              <button class="btn-sm cfg-up" type="button" ${i === 0 ? "disabled" : ""} title="Subir">↑</button>
+              <button class="btn-sm cfg-down" type="button" ${i === lista.length - 1 ? "disabled" : ""} title="Bajar">↓</button></span></td>
+            <td><input class="cfg-nombre" type="text" maxlength="40" value="${escHtml(f.nombre)}" data-original="${escHtml(f.nombre)}"></td>
+            <td><label class="cfg-activa"><input type="checkbox" class="cfg-chk" ${f.activo ? "checked" : ""}>${f.activo ? "Activa" : "Inactiva"}</label></td>
+            <td><button class="btn-sm cfg-guardar" type="button">Guardar nombre</button></td>
+          </tr>`).join("")}</tbody></table></div>` : `<div class="feed-empty">Todavía no hay funciones. Agrega la primera arriba.</div>`}
+      </div>
+      <div class="card">
+        <h3>Cómo funciona</h3>
+        <ul class="cfg-lista">
+          <li><strong>Desactivar</strong> una función la quita del desplegable pero conserva el historial de quienes ya la tuvieron.</li>
+          <li><strong>Renombrar</strong> corrige también las asignaciones ya guardadas (útil para arreglar una tilde o un error de tipeo).</li>
+          <li>Las <strong>zonas</strong> de picking (Mezzanine, Estantería, Knapp) siguen asignándose en Personal → Editar; no son lo mismo que la función diaria.</li>
+          <li>Pueden asignar funciones: Administrador, Gestión Humana, Coordinador y Supervisor. Gerencia solo consulta.</li>
+        </ul>
+      </div>
+    </div>`;
+  const nueva = document.getElementById("cfg-nueva");
+  const agregar = async () => {
+    const nombre = nueva.value.trim();
+    if(nombre.length < 2){ toast("Escribe el nombre de la función (mínimo 2 letras).", true); return; }
+    try{ await rpc("asis_funcion_guardar", { p_nombre: nombre, p_activo: true }); toast(`Función «${nombre}» agregada`); await recargarConfig(); }
+    catch(e){ toast(humanError(e, { DATOS_INCOMPLETOS: "El nombre debe tener entre 2 y 40 caracteres." }), true); }
+  };
+  document.getElementById("cfg-agregar").addEventListener("click", agregar);
+  nueva.addEventListener("keydown", (e) => { if(e.key === "Enter") agregar(); });
+
+  panel.querySelectorAll("tbody tr[data-id]").forEach(tr => {
+    const f = funcionesCat.find(x => String(x.id) === tr.dataset.id);
+    tr.querySelector(".cfg-guardar").addEventListener("click", async () => {
+      const nombre = tr.querySelector(".cfg-nombre").value.trim();
+      if(nombre === f.nombre){ toast("No hay cambios en el nombre."); return; }
+      if(f.nombre && !confirm(`¿Renombrar «${f.nombre}» a «${nombre}»? También se corrige en las asignaciones ya guardadas.`)) return;
+      try{ await rpc("asis_funcion_guardar", { p_id: f.id, p_nombre: nombre, p_activo: f.activo }); toast("Nombre actualizado"); await recargarConfig(); }
+      catch(e){ toast(humanError(e, { DATOS_INCOMPLETOS: "El nombre debe tener entre 2 y 40 caracteres." }), true); }
+    });
+    tr.querySelector(".cfg-chk").addEventListener("change", async (ev) => {
+      const activo = ev.target.checked;
+      try{ await rpc("asis_funcion_guardar", { p_id: f.id, p_nombre: f.nombre, p_activo: activo }); toast(activo ? `«${f.nombre}» activada` : `«${f.nombre}» desactivada`); await recargarConfig(); }
+      catch(e){ ev.target.checked = !activo; toast(humanError(e), true); }
+    });
+    tr.querySelector(".cfg-up").addEventListener("click", () => moverFuncion(f.id, -1));
+    tr.querySelector(".cfg-down").addEventListener("click", () => moverFuncion(f.id, 1));
+  });
+}
+async function recargarConfig(){
+  if(await cargarFunciones()) pintarConfig();
+  else toast("No se pudo recargar la lista: " + humanError(funcionesError), true);
+}
+// Reordenar = reescribir "orden" como 1..n solo donde cambió (son pocas filas).
+async function moverFuncion(id, delta){
+  const lista = funcionesCat.map(f => ({ ...f }));
+  const i = lista.findIndex(f => f.id === id), j = i + delta;
+  if(i < 0 || j < 0 || j >= lista.length) return;
+  [lista[i], lista[j]] = [lista[j], lista[i]];
+  try{
+    for(let k = 0; k < lista.length; k++){
+      if(lista[k].orden !== k + 1 || k === i || k === j)
+        await rpc("asis_funcion_guardar", { p_id: lista[k].id, p_nombre: lista[k].nombre, p_activo: lista[k].activo, p_orden: k + 1 });
+    }
+  }catch(e){ toast(humanError(e), true); }
+  await recargarConfig();
+}
+
 /* ================= Arranque ================= */
 async function iniciarApp(){
   document.getElementById("login-screen").style.display = "none";
   document.getElementById("app").classList.add("show");
   document.getElementById("user-nombre").textContent = session.nombre || session.username || "—";
   document.getElementById("user-rol").textContent = ROLE_LABELS[session.rol] || session.rol || "—";
+  document.getElementById("tab-config").hidden = !PK_ROLES_CONFIG.includes(session.rol);
   await Promise.all([cargarAreas(), cargarZonas()]);
   renderTabActivo();
 }
