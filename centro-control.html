@@ -106,6 +106,8 @@
   #filter-bar input, #filter-bar select{background:var(--panel-alt);border:1px solid var(--border);color:var(--text);
     border-radius:8px;padding:7px 10px;font-size:12.5px;}
   #filter-bar button{background:var(--red);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;}
+  #filter-bar #f-limpiar{background:var(--panel-alt);color:var(--text-soft);border:1px solid var(--border);font-weight:600;}
+  #filter-bar #f-limpiar:hover{color:var(--text);border-color:var(--red);}
   #filter-bar .hint{margin-left:auto;font-size:11.5px;color:var(--muted);font-family:var(--mono);}
 
   main{flex:1;min-height:0;overflow:auto;padding:20px;}
@@ -272,6 +274,7 @@
     <label>Área</label><select id="f-area"><option value="">Todas</option></select>
     <label>Zona picking</label><select id="f-zona"></select>
     <button id="f-aplicar">Aplicar</button>
+    <button id="f-limpiar" type="button" title="Quitar Área y Zona y volver al mes actual">Limpiar</button>
     <span class="hint" id="f-hint"></span>
   </div>
 
@@ -446,12 +449,33 @@ async function rpc(nombre, params){
 const filtros = { desde: monthStartISO(), hasta: todayISO(), area: "", zona: "" };
 document.getElementById("f-desde").value = filtros.desde;
 document.getElementById("f-hasta").value = filtros.hasta;
-document.getElementById("f-aplicar").addEventListener("click", () => {
-  filtros.desde = document.getElementById("f-desde").value || filtros.desde;
-  filtros.hasta = document.getElementById("f-hasta").value || filtros.hasta;
+// Cada render captura este numero al empezar y se descarta si cambio mientras esperaba
+// datos: asi una respuesta lenta de un filtro anterior no pisa la del filtro actual, y
+// "En Vivo" no acumula ciclos de refresco cada vez que se cambia un filtro.
+let renderGen = 0;
+
+function aplicarFiltros(){
+  let desde = document.getElementById("f-desde").value || filtros.desde;
+  let hasta = document.getElementById("f-hasta").value || filtros.hasta;
+  if(desde > hasta){ [desde, hasta] = [hasta, desde]; } // rango invertido: se corrige en vez de mostrar vacio
+  document.getElementById("f-desde").value = desde;
+  document.getElementById("f-hasta").value = hasta;
+  filtros.desde = desde;
+  filtros.hasta = hasta;
   filtros.area = document.getElementById("f-area").value || "";
   filtros.zona = document.getElementById("f-zona").value || "";
   renderTabActivo();
+}
+document.getElementById("f-aplicar").addEventListener("click", aplicarFiltros);
+// Se aplica al cambiar cualquier filtro (antes habia que acordarse de pulsar "Aplicar" y,
+// si no, la tabla seguia con el filtro anterior aunque el selector dijera otra cosa).
+["f-desde","f-hasta","f-area","f-zona"].forEach(id => document.getElementById(id).addEventListener("change", aplicarFiltros));
+document.getElementById("f-limpiar").addEventListener("click", () => {
+  document.getElementById("f-desde").value = monthStartISO();
+  document.getElementById("f-hasta").value = todayISO();
+  document.getElementById("f-area").value = "";
+  document.getElementById("f-zona").value = "";
+  aplicarFiltros();
 });
 
 async function cargarAreas(){
@@ -568,6 +592,8 @@ document.querySelectorAll("#tabs button").forEach(btn => {
   });
 });
 function renderTabActivo(){
+  renderGen++;       // invalida cualquier render / ciclo de refresco anterior que siga esperando datos
+  pararFeedVivo();
   // "En Vivo" siempre es HOY en tiempo real (se refresca solo cada 5s) --
   // el rango de fechas del filtro no aplica ahi, asi que se oculta para
   // no dar a entender que se puede "ver el ayer" en esa pestaña.
@@ -575,11 +601,12 @@ function renderTabActivo(){
   const esVivo = tabActivo === "vivo";
   const sinFechas = esVivo || tabActivo === "personal";
   document.getElementById("filter-fechas").classList.toggle("oculto", sinFechas);
-  document.getElementById("f-hint").textContent = esVivo
+  const filtrosActivos = (filtros.area || filtros.zona) ? " · " + etiquetaFiltro("") : "";
+  document.getElementById("f-hint").textContent = (esVivo
     ? `Hoy, ${new Date().toLocaleDateString("es-PE",{weekday:"long",day:"numeric",month:"long"})} · en vivo`
     : tabActivo === "personal"
       ? "Colaboradores activos hoy"
-      : `${fmtFecha(filtros.desde)} → ${fmtFecha(filtros.hasta)}`;
+      : `${fmtFecha(filtros.desde)} → ${fmtFecha(filtros.hasta)}`) + filtrosActivos;
   if(tabActivo === "vivo") renderVivo();
   else if(tabActivo === "ausentismo") renderAusentismo();
   else if(tabActivo === "rotacion") renderRotacion();
@@ -604,15 +631,18 @@ function kpiTile(label, value, sub, color, icon){
 }
 
 async function renderVivo(){
+  const gen = renderGen;
   const panel = document.getElementById("panel-vivo");
   panel.innerHTML = `<div class="loading">Cargando…</div>`;
-  await tickVivo(true);
-  loopVivo();
+  await tickVivo(true, gen);
+  if(gen !== renderGen) return;
+  loopVivo(gen);
 }
-async function loopVivo(){
-  if(tabActivo !== "vivo") return;
-  await tickVivo(false);
-  feedTimer = setTimeout(loopVivo, 5000);
+async function loopVivo(gen){
+  if(gen !== renderGen || tabActivo !== "vivo") return;
+  await tickVivo(false, gen);
+  if(gen !== renderGen) return;
+  feedTimer = setTimeout(() => loopVivo(gen), 5000);
 }
 // "Picking hoy": por cada zona (Mezzanine / Estanteria / Knapp), cuantos de los
 // colaboradores asignados ya marcaron Ingreso. Cuenta a quien tenga varias zonas
@@ -638,7 +668,7 @@ function pickingStripHtml(censo, marcas){
     }).join("")}</div>`;
 }
 
-async function tickVivo(primeraVez){
+async function tickVivo(primeraVez, gen){
   const hoy = todayISO();
   let censoHoy = [], marcasHoy = [];
   try{
@@ -647,9 +677,11 @@ async function tickVivo(primeraVez){
       rpc("asis_reporte", { p_desde: hoy, p_hasta: hoy, p_area: filtros.area || null }),
     ]);
   }catch(e){
+    if(gen !== undefined && gen !== renderGen) return;
     document.getElementById("panel-vivo").innerHTML = `<div class="loading">Error: ${humanError(e)}</div>`;
     return;
   }
+  if(gen !== undefined && gen !== renderGen) return; // los filtros cambiaron mientras esperaba
 
   // La franja "Picking hoy" siempre muestra las 3 zonas completas (solo respeta
   // el filtro de area), aunque el filtro de zona de abajo recorte el resto.
@@ -833,6 +865,7 @@ function exportarVivoExcel(){
    "ASISTENCIA" del Excel -- ese codigo (A/V/F/AM/DF/...) se muestra
    aparte, como clasificacion complementaria, solo cuando existe. */
 async function renderAusentismo(){
+  const gen = renderGen;
   const panel = document.getElementById("panel-ausentismo");
   panel.innerHTML = `<div class="loading">Cargando…</div>`;
   let censo, marcas;
@@ -841,7 +874,8 @@ async function renderAusentismo(){
       rpc("asis_censo", { p_desde: filtros.desde, p_hasta: filtros.hasta, p_area: filtros.area || null }),
       rpc("asis_reporte", { p_desde: filtros.desde, p_hasta: filtros.hasta, p_area: filtros.area || null }),
     ]);
-  }catch(e){ panel.innerHTML = `<div class="loading">Error: ${humanError(e)}</div>`; return; }
+  }catch(e){ if(gen !== renderGen) return; panel.innerHTML = `<div class="loading">Error: ${humanError(e)}</div>`; return; }
+  if(gen !== renderGen) return;
 
   registrarAreas(censo); registrarAreas(marcas);
   const censoSinFiltroZona = censo.length;
@@ -1022,11 +1056,13 @@ function exportarAusenciasExcel(){
 
 /* ================= TAB: Rotación ================= */
 async function renderRotacion(){
+  const gen = renderGen;
   const panel = document.getElementById("panel-rotacion");
   panel.innerHTML = `<div class="loading">Cargando…</div>`;
   let censo;
   try{ censo = await rpc("asis_censo", { p_desde: filtros.desde, p_hasta: filtros.hasta, p_area: filtros.area || null }); }
-  catch(e){ panel.innerHTML = `<div class="loading">Error: ${humanError(e)}</div>`; return; }
+  catch(e){ if(gen !== renderGen) return; panel.innerHTML = `<div class="loading">Error: ${humanError(e)}</div>`; return; }
+  if(gen !== renderGen) return;
   registrarAreas(censo);
   censo = filtrarZona(censo);
 
@@ -1087,11 +1123,13 @@ async function renderRotacion(){
 
 /* ================= TAB: Asistencia General ================= */
 async function renderGeneral(){
+  const gen = renderGen;
   const panel = document.getElementById("panel-general");
   panel.innerHTML = `<div class="loading">Cargando…</div>`;
   let marcas;
   try{ marcas = await rpc("asis_reporte", { p_desde: filtros.desde, p_hasta: filtros.hasta, p_area: filtros.area || null }); }
-  catch(e){ panel.innerHTML = `<div class="loading">Error: ${humanError(e)}</div>`; return; }
+  catch(e){ if(gen !== renderGen) return; panel.innerHTML = `<div class="loading">Error: ${humanError(e)}</div>`; return; }
+  if(gen !== renderGen) return;
   registrarAreas(marcas);
   marcas = filtrarZona(marcas);
 
@@ -1244,10 +1282,12 @@ function exportarGeneralExcel(filas){
 let personalData = []; // todos los activos, sin filtrar
 let personalBase = []; // los que pasan el Area y la Zona del filtro global
 async function renderPersonal(){
+  const gen = renderGen;
   const panel = document.getElementById("panel-personal");
   panel.innerHTML = `<div class="loading">Cargando…</div>`;
   try{ personalData = await rpc("asis_rostros_estado", {}); }
-  catch(e){ panel.innerHTML = `<div class="loading">Error: ${humanError(e)}</div>`; return; }
+  catch(e){ if(gen !== renderGen) return; panel.innerHTML = `<div class="loading">Error: ${humanError(e)}</div>`; return; }
+  if(gen !== renderGen) return;
 
   // Esta pestaña no se filtraba con Area/Zona (siempre listaba a todos): ahora respeta la barra de arriba.
   registrarAreas(personalData);
@@ -1432,7 +1472,7 @@ async function renderPagos(){
       </div>
       <div class="card">
         <h3>Calcular planilla del período</h3>
-        <p class="hint">Usa el rango de fechas del filtro superior (${fmtFecha(filtros.desde)} → ${fmtFecha(filtros.hasta)}). Faltas no justificadas descuentan día completo; tardanzas descuentan proporcional a los minutos.</p>
+        <p class="hint">Usa el rango de fechas, el Área y la Zona del filtro superior (${fmtFecha(filtros.desde)} → ${fmtFecha(filtros.hasta)}${(filtros.area || filtros.zona) ? " · " + etiquetaFiltro("") : ""}). Faltas no justificadas descuentan día completo; tardanzas descuentan proporcional a los minutos.</p>
         <button class="btn-sm primary" id="btn-calcular-planilla">Calcular planilla</button>
         <button class="btn-sm" id="btn-exportar-planilla" style="margin-left:8px;" hidden>Exportar a Excel</button>
         <div id="planilla-resultado" style="margin-top:16px;"></div>
@@ -1460,9 +1500,12 @@ async function renderPagos(){
     try{
       ultimaPlanilla = await rpc("asis_planilla_calcular", { p_desde: filtros.desde, p_hasta: filtros.hasta, p_area: filtros.area || null });
     }catch(e){ cont.innerHTML = `<div class="loading">Error: ${humanError(e)}</div>`; return; }
+    // El Area se filtra en el servidor; la Zona de picking vive en otra tabla, asi que se aplica aca.
+    registrarAreas(ultimaPlanilla);
+    ultimaPlanilla = filtrarZona(ultimaPlanilla);
 
     if(!ultimaPlanilla.length){
-      cont.innerHTML = `<div class="hint">Nadie en este rango tiene sueldo registrado todavía.</div>`;
+      cont.innerHTML = `<div class="hint">${(filtros.area || filtros.zona) ? `Nadie con sueldo registrado cumple el filtro (${etiquetaFiltro("")}) en este rango.` : "Nadie en este rango tiene sueldo registrado todavía."}</div>`;
       document.getElementById("btn-exportar-planilla").hidden = true;
       return;
     }
@@ -1490,7 +1533,7 @@ async function renderPagos(){
   document.getElementById("btn-exportar-planilla").addEventListener("click", () => {
     if(!ultimaPlanilla.length) return;
     const rows = ultimaPlanilla.map(r => ({
-      DNI: r.dni, Nombre: r.nombre, Área: r.area, "Sueldo mensual": r.sueldo_mensual,
+      DNI: r.dni, Nombre: r.nombre, Área: r.area, "Zona picking": zonasTexto(r.dni), "Sueldo mensual": r.sueldo_mensual,
       "Días falta": r.dias_falta, "Descuento faltas": r.deduccion_faltas,
       "Minutos tardanza": r.minutos_tardanza, "Descuento tardanza": r.deduccion_tardanzas,
       "Sueldo neto": r.sueldo_neto,
