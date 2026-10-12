@@ -315,6 +315,12 @@
   .cfg-activa input{accent-color:var(--red);width:15px;height:15px;}
   .cfg-lista{margin:0;padding-left:18px;font-size:12.5px;color:var(--text-soft);line-height:1.7;}
   tr.cfg-inactiva td:not(:last-child){opacity:.55;}
+  .cfg-areas{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-top:12px;}
+  .cfg-area{display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border);border-radius:9px;background:var(--panel-alt);
+    font-size:12.5px;cursor:pointer;}
+  .cfg-area:has(input:checked){border-color:var(--red);background:var(--red-tint);font-weight:700;}
+  .cfg-area small{margin-left:auto;font-family:var(--mono);color:var(--muted);}
+  .cfg-area input{accent-color:var(--red);}
 </style>
 </head>
 <body>
@@ -1671,7 +1677,10 @@ let funcionesCat = [];        // catálogo completo (activas e inactivas), orden
 let funcionesError = null;
 const SIN_TURNO = "__SINTURNO__";
 const TURNO_ORDEN = ["MANANA", "TARDE", "NOCHE"];   // claves normalizadas (sin tilde)
-const pk = { fecha: null, filas: [], sup: "", turno: "", supInit: false, supNoEncontrado: false, q: "", soloSin: false, func: "",
+const pk = { fecha: null, filas: [], todas: [],   // filas = las que entran a Picking; todas = todo el personal activo del día
+             areasCfg: null,        // Set de áreas (normalizadas) configuradas; vacío/null = zonas de picking por defecto
+             areasCfgLabels: [], incluirOtras: false,
+             sup: "", turno: "", supInit: false, supNoEncontrado: false, q: "", soloSin: false, func: "",
              sel: new Set(), hist: null, histDias: 14, histT: null,
              agrupar: "sup",        // resumen del dia: por "sup" o por "turno"
              vistaHist: "dia",      // historial: "dia" | "sup" | "persona"
@@ -1713,6 +1722,24 @@ function pkSupervisores(){
   });
   return { map, sinSup };
 }
+/* ---- Alcance: a quién se le asigna función en Picking ----
+   No todo el personal es de picking (Despacho, 3PL, Cámara de frío…): entran las áreas configuradas en
+   Configuración o, si no hay ninguna, las zonas de picking (Mezzanine, Estantería, Knapp). Quien tenga una zona
+   asignada a mano entra siempre. "Incluir otras áreas" muestra a todos (para prestar a alguien por un día). */
+function pkEnAlcance(dni, area){
+  if(pk.incluirOtras) return true;
+  const manual = zonasMap[dni];
+  if(manual && manual.length) return true;
+  return pk.areasCfg && pk.areasCfg.size ? pk.areasCfg.has(normArea(area)) : !!zonaDeArea(area);
+}
+function pkSetFilas(filas){
+  pk.todas = filas || [];
+  registrarAreas(pk.todas);
+  pk.filas = pk.todas.filter(p => pkEnAlcance(p.dni, p.area));
+}
+const pkAreasTexto = () => pk.areasCfg && pk.areasCfg.size
+  ? pk.areasCfgLabels.map(a => { const z = zonaDeArea(a); return z ? zonaDef(z).label : tituloTurno(a); }).join(", ")
+  : ZONAS_PICKING.map(z => z.label).join(", ");
 const tituloTurno = (s) => { const t = String(s || "").trim().toLowerCase(); return t ? t.charAt(0).toUpperCase() + t.slice(1) : ""; };
 function pkTurnos(){
   const map = new Map(); let sinTurno = 0;
@@ -1732,6 +1759,7 @@ const supIgual = (sup, sel) => sel === SIN_SUP ? !normNombre(sup) : normNombre(s
 function pkBase(sinTurno){
   const areaSel = normArea(filtros.area);
   return pk.filas.filter(p => (!areaSel || normArea(p.area) === areaSel) && pasaFiltroZona(p.dni) && (sinTurno || !pk.turno || turnoIgual(p.turno, pk.turno)));
+  // (pk.filas ya viene recortada al alcance de Picking, ver renderPicking)
 }
 function pkPorSupervisor(lista){
   return pk.sup ? lista.filter(p => supIgual(p.supervisor, pk.sup)) : lista;
@@ -1741,7 +1769,7 @@ const pkEtiquetaTurno = () => !pk.turno ? "" : pk.turno === SIN_TURNO ? "Sin tur
 /* ---- Historial: filas {dni, fecha, funcion, nombre, turno, supervisor, area} (los datos son los de ESE dia) ---- */
 // Sin la migracion 0014 el servidor solo manda dni/fecha/funcion: se completan con el censo del dia que se esta viendo.
 function pkNormHist(rows){
-  const ros = new Map(pk.filas.map(p => [p.dni, p]));
+  const ros = new Map(pk.todas.map(p => [p.dni, p]));
   return (rows || []).map(r => {
     if(r.nombre !== undefined) return r;
     const p = ros.get(r.dni);
@@ -1752,7 +1780,7 @@ function pkNormHist(rows){
 function pkSyncHistDia(){
   if(!pk.hist) return;
   pk.hist.rows = pk.hist.rows.filter(r => r.fecha !== pk.fecha);
-  pk.filas.forEach(p => { if(p.funcion) pk.hist.rows.push({ dni: p.dni, fecha: pk.fecha, funcion: p.funcion, nombre: p.nombre, turno: p.turno, supervisor: p.supervisor, area: p.area }); });
+  pk.todas.forEach(p => { if(p.funcion) pk.hist.rows.push({ dni: p.dni, fecha: pk.fecha, funcion: p.funcion, nombre: p.nombre, turno: p.turno, supervisor: p.supervisor, area: p.area }); });
 }
 function pasaZonaHist(r){
   const f = filtros.zona; if(!f) return true;
@@ -1764,7 +1792,7 @@ function pasaZonaHist(r){
 }
 function pkPasaHist(r, sinSup){
   const areaSel = normArea(filtros.area);
-  return (!areaSel || normArea(r.area) === areaSel) && pasaZonaHist(r)
+  return pkEnAlcance(r.dni, r.area) && (!areaSel || normArea(r.area) === areaSel) && pasaZonaHist(r)
     && (!pk.turno || turnoIgual(r.turno, pk.turno)) && (sinSup || !pk.sup || supIgual(r.supervisor, pk.sup));
 }
 const pkFechasHist = () => Array.from({ length: pk.histDias }, (_, i) => addDays(pk.fecha, i - (pk.histDias - 1)));
@@ -1794,9 +1822,11 @@ async function renderPicking(){
   const panel = document.getElementById("panel-picking");
   panel.innerHTML = `<div class="loading">Cargando…</div>`;
   if(!pk.fecha) pk.fecha = todayISO();
-  let filas;
+  let filas, areasCfg = [];
   try{
-    [, filas] = await Promise.all([cargarFunciones(), rpc("asis_picking_dia", { p_fecha: pk.fecha })]);
+    // Las áreas configuradas son opcionales: si la migración 0015 no está aplicada se usan las zonas de picking.
+    [, filas, areasCfg] = await Promise.all([cargarFunciones(), rpc("asis_picking_dia", { p_fecha: pk.fecha }),
+      rpc("asis_picking_areas_listar", {}).catch(() => [])]);
   }catch(e){
     if(gen !== renderGen) return;
     panel.innerHTML = migracion0013Faltante(e) ? bannerMigracion0013() : `<div class="loading">Error: ${escHtml(humanError(e))}</div>`;
@@ -1807,8 +1837,9 @@ async function renderPicking(){
     panel.innerHTML = migracion0013Faltante(funcionesError) ? bannerMigracion0013() : `<div class="loading">Error: ${escHtml(humanError(funcionesError))}</div>`;
     return;
   }
-  pk.filas = filas || [];
-  registrarAreas(pk.filas);
+  pk.areasCfgLabels = areasCfg || [];
+  pk.areasCfg = new Set(pk.areasCfgLabels.map(normArea));
+  pkSetFilas(filas);
   // El historial de otros dias casi no cambia: se reutiliza unos minutos para no volver a bajarlo con cada filtro.
   if(pk.hist && pk.hist.fecha === pk.fecha && Date.now() - pk.hist.t < 300000) pkSyncHistDia();
   else pk.hist = null;
@@ -1850,10 +1881,12 @@ async function renderPicking(){
         <div class="pk-field"><label>Supervisor</label><select id="pk-sup">${supOpts}</select></div>
         <div class="pk-field grow"><label>Buscar</label><input type="text" id="pk-buscar" placeholder="Nombre, DNI, puesto, área o función…" value="${escHtml(pk.q)}"></div>
         <label class="pk-check"><input type="checkbox" id="pk-solo-sin" ${pk.soloSin ? "checked" : ""}>Solo sin asignar</label>
+        <label class="pk-check" title="Muestra también al personal de áreas que no son de picking (Despacho, 3PL…), por ejemplo para prestar a alguien por un día."><input type="checkbox" id="pk-otras" ${pk.incluirOtras ? "checked" : ""}>Incluir otras áreas</label>
         <button class="btn-sm" id="pk-copiar" type="button" disabled>📋 Copiar día anterior</button>
         <button class="btn-sm" id="pk-exportar" type="button">⬇ Excel</button>
       </div>
       <p class="pk-nota" id="pk-nota"></p>
+      <p class="pk-nota" id="pk-alcance" style="margin-top:4px;"></p>
     </div>
     <div class="kpi-grid" id="pk-kpis"></div>
     <div class="card">
@@ -1940,6 +1973,7 @@ function pkEnlazarEventos(){
   el("pk-turno").addEventListener("change", (e) => { pk.turno = e.target.value; refiltrar(); });
   el("pk-buscar").addEventListener("input", (e) => { pk.q = e.target.value; pintarPicking(); });
   el("pk-solo-sin").addEventListener("change", (e) => { pk.soloSin = e.target.checked; pintarPicking(); });
+  el("pk-otras").addEventListener("change", (e) => { pk.incluirOtras = e.target.checked; renderTabActivo(); });   // recarga: cambian los supervisores/turnos disponibles
   el("pk-exportar").addEventListener("click", exportarPickingExcel);
   el("pk-copiar").addEventListener("click", copiarPickingAnterior);
   // El rango (7/14/30 días) es uno solo: el gráfico y el historial por día se mueven juntos.
@@ -2010,6 +2044,10 @@ function pintarPicking(){
   else if(pk.fecha > hoy){ msg = "Estás planificando para mañana."; }
   else { msg = "Elige la función de cada persona: se guarda al instante. Para varias a la vez, marca las casillas y usa la barra roja."; }
   nota.innerHTML = msg; nota.classList.toggle("warn", warn);
+  const fuera = pk.incluirOtras ? 0 : pk.todas.length - pk.filas.length;
+  document.getElementById("pk-alcance").innerHTML = pk.incluirOtras
+    ? "Mostrando <strong>todas las áreas</strong>. Desmarca «Incluir otras áreas» para ver solo las de picking."
+    : `Áreas de picking: <strong>${escHtml(pkAreasTexto())}</strong>${fuera ? ` · hay ${fuera} personas de otras áreas que no se listan` : ""}. ${PK_ROLES_CONFIG.includes(session.rol) ? "Puedes cambiar las áreas en Configuración." : ""}`;
 
   // KPIs
   const conF = vis.filter(p => p.funcion).length;
@@ -2031,7 +2069,7 @@ function pintarPicking(){
   items.push({ key: SIN_FUNC, label: "Sin asignar", n: sin, color: "#9CA3AF" });
   const total = vis.length;
   document.getElementById("pk-dist").innerHTML = !total
-    ? `<div class="feed-empty">${(filtros.area || filtros.zona || pk.sup || pk.turno) ? "Nadie cumple el filtro actual." : "No hay colaboradores activos en esta fecha."}</div>`
+    ? `<div class="feed-empty">${(filtros.area || filtros.zona || pk.sup || pk.turno) ? "Nadie cumple el filtro actual." : "No hay colaboradores de picking en esta fecha."}${fuera ? " Marca «Incluir otras áreas» para ver al resto del personal." : ""}</div>`
     : `<div class="pk-dist-bar">${items.filter(i => i.n).map(i => `<span style="width:${i.n / total * 100}%;background:${i.color};" title="${escHtml(i.label)}: ${i.n}"></span>`).join("")}</div>
        <div class="pk-chips">${items.map(i => `<button type="button" class="pk-chip${pk.func === i.key ? " on" : ""}" data-func="${escHtml(i.key)}" style="--c:${i.color};">
          <i></i>${escHtml(i.label)} <b>${i.n}</b> <small>${Math.round(i.n / total * 100)}%</small></button>`).join("")}</div>`;
@@ -2406,7 +2444,7 @@ async function copiarPickingAnterior(){
     const gen = renderGen;
     const [filas, rows] = await Promise.all([rpc("asis_picking_dia", { p_fecha: fecha }), rpc("asis_picking_rango", { p_desde: addDays(fecha, -29), p_hasta: fecha })]);
     if(gen !== renderGen || pk.fecha !== fecha) return;
-    pk.filas = filas || []; registrarAreas(pk.filas); pk.hist = { fecha, t: Date.now(), rows: pkNormHist(rows) };
+    pkSetFilas(filas); pk.hist = { fecha, t: Date.now(), rows: pkNormHist(rows) };
     pkSyncHistDia();
     pintarPicking(); pintarHistorialPicking();
   }catch(e){
@@ -2438,13 +2476,66 @@ async function renderConfig(){
     return;
   }
   panel.innerHTML = `<div class="loading">Cargando…</div>`;
-  const ok = await cargarFunciones();
+  const [ok] = await Promise.all([cargarFunciones(), cargarAreasCfg()]);
   if(gen !== renderGen) return;
   if(!ok){
     panel.innerHTML = migracion0013Faltante(funcionesError) ? bannerMigracion0013() : `<div class="loading">Error: ${escHtml(humanError(funcionesError))}</div>`;
     return;
   }
   pintarConfig();
+}
+
+// Áreas del censo (con cuántos activos tiene cada una) y cuáles están marcadas como "de picking".
+const cfgAreas = { error: null, guardadas: [], conteo: [] };
+async function cargarAreasCfg(){
+  cfgAreas.error = null;
+  try{ cfgAreas.guardadas = (await rpc("asis_picking_areas_listar", {})) || []; }
+  catch(e){ cfgAreas.error = e; cfgAreas.guardadas = []; }
+  try{
+    const dia = (await rpc("asis_picking_dia", { p_fecha: todayISO() })) || [];
+    const m = new Map();
+    dia.forEach(p => { const k = normArea(p.area); if(!k) return; const e = m.get(k) || { key: k, label: String(p.area).trim(), n: 0 }; e.n++; m.set(k, e); });
+    cfgAreas.conteo = [...m.values()];
+  }catch(e){ cfgAreas.conteo = []; }
+  // Las ya guardadas que hoy no tienen personal siguen apareciendo (para no perderlas al guardar).
+  cfgAreas.guardadas.forEach(a => { if(!cfgAreas.conteo.some(c => c.key === normArea(a))) cfgAreas.conteo.push({ key: normArea(a), label: a, n: 0 }); });
+  cfgAreas.conteo.sort((a, b) => b.n - a.n || a.label.localeCompare(b.label, "es"));
+}
+function cfgAreasHtml(){
+  const guardadas = new Set(cfgAreas.guardadas.map(normArea));
+  const explicito = guardadas.size > 0;
+  if(cfgAreas.error){
+    return `<div class="card"><h3>Áreas que aparecen en Picking</h3>
+      ${migracion0013Faltante(cfgAreas.error)
+        ? `<div class="banner" style="margin-top:10px;">Falta aplicar la migración <strong>0015_asis_picking_areas.sql</strong> en Supabase para poder elegir las áreas. Mientras tanto Picking usa Mezzanine, Estantería y Knapp.</div>`
+        : `<div class="loading">Error: ${escHtml(humanError(cfgAreas.error))}</div>`}</div>`;
+  }
+  return `<div class="card">
+    <h3>Áreas que aparecen en Picking</h3>
+    <p class="hint">Marca las áreas del censo cuyo personal recibe una función cada día. Quien tenga una zona de picking asignada a mano (Personal → Editar) entra siempre.
+      ${explicito ? "" : "Ahora se usan las <strong>zonas de picking por defecto</strong> (Mezzanine, Estantería y Knapp); al guardar con otras marcas se reemplazan."}</p>
+    <div class="cfg-areas" id="cfg-areas">${cfgAreas.conteo.map(c => {
+      const marcada = explicito ? guardadas.has(c.key) : !!zonaDeArea(c.label);
+      return `<label class="cfg-area"><input type="checkbox" value="${escHtml(c.label)}" ${marcada ? "checked" : ""}>${escHtml(c.label)}<small>${c.n}</small></label>`;
+    }).join("")}</div>
+    <div class="cfg-add" style="margin:14px 0 0;">
+      <button class="btn-sm primary" id="cfg-areas-guardar" type="button">Guardar áreas</button>
+      <button class="btn-sm" id="cfg-areas-defecto" type="button" ${explicito ? "" : "disabled"}>Volver a Mezzanine · Estantería · Knapp</button>
+    </div></div>`;
+}
+function enlazarAreasCfg(){
+  const guardar = async (areas, msg) => {
+    try{ await rpc("asis_picking_areas_guardar", { p_areas: areas }); toast(msg); await cargarAreasCfg(); pintarConfig(); }
+    catch(e){ toast("No se pudo guardar: " + humanError(e), true); }
+  };
+  const g = document.getElementById("cfg-areas-guardar"); if(!g) return;
+  g.addEventListener("click", () => {
+    const marcadas = [...document.querySelectorAll("#cfg-areas input:checked")].map(i => i.value);
+    guardar(marcadas, marcadas.length ? `Se guardaron ${marcadas.length} áreas de Picking` : "Se restablecieron las zonas por defecto");
+  });
+  document.getElementById("cfg-areas-defecto").addEventListener("click", () => {
+    if(confirm("¿Volver a usar solo Mezzanine, Estantería y Knapp?")) guardar([], "Se restablecieron las zonas por defecto");
+  });
 }
 function pintarConfig(){
   const panel = document.getElementById("panel-config");
@@ -2477,7 +2568,9 @@ function pintarConfig(){
           <li>Pueden asignar funciones: Administrador, Gestión Humana, Coordinador y Supervisor. Gerencia solo consulta.</li>
         </ul>
       </div>
-    </div>`;
+    </div>
+    ${cfgAreasHtml()}`;
+  enlazarAreasCfg();
   const nueva = document.getElementById("cfg-nueva");
   const agregar = async () => {
     const nombre = nueva.value.trim();
