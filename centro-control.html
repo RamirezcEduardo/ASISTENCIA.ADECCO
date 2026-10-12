@@ -209,6 +209,25 @@
   .pm-status.ok{color:var(--green);}
   .pm-actions{display:flex;gap:10px;margin-top:20px;}
   .pm-actions button{flex:1;}
+  .pm-sub{text-transform:none;letter-spacing:0;font-weight:500;opacity:.8;}
+  .pm-zonas{display:flex;flex-wrap:wrap;gap:8px;}
+  .personal-modal-card .pm-zonas label{display:flex;align-items:center;gap:7px;margin:0;padding:8px 12px;border:1px solid var(--border);
+    border-radius:9px;background:var(--panel-alt);font-size:12.5px;color:var(--text);text-transform:none;letter-spacing:0;cursor:pointer;}
+  .personal-modal-card .pm-zonas label:has(input:checked){border-color:var(--red);background:var(--red-tint);font-weight:700;}
+  .personal-modal-card .pm-zonas input{width:auto;margin:0;accent-color:var(--red);}
+
+  /* ============ Zonas de picking ============ */
+  .zona-badges{display:inline-flex;flex-wrap:wrap;gap:4px;}
+  .zona-badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:10.5px;font-weight:700;white-space:nowrap;}
+  .picking-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:20px;}
+  .picking-tile{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .picking-tile .zt{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
+  .picking-tile .zv{font-family:var(--mono);font-size:24px;font-weight:800;line-height:1.1;margin-top:4px;color:var(--text);}
+  .picking-tile .zv small{font-size:13px;font-weight:600;color:var(--muted);}
+  .picking-tile .zp{font-size:11px;color:var(--muted);margin-top:3px;}
+  .picking-tile .zring{width:44px;height:44px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+    font-family:var(--mono);font-size:11px;font-weight:800;}
+  .picking-title{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:700;margin:0 0 8px;}
 </style>
 </head>
 <body>
@@ -251,6 +270,7 @@
     <span id="filter-fechas"><label>Desde</label><input type="date" id="f-desde">
     <label>Hasta</label><input type="date" id="f-hasta"></span>
     <label>Área</label><select id="f-area"><option value="">Todas</option></select>
+    <label>Zona picking</label><select id="f-zona"></select>
     <button id="f-aplicar">Aplicar</button>
     <span class="hint" id="f-hint"></span>
   </div>
@@ -276,8 +296,11 @@
     <input type="text" id="pm-nombre">
     <div class="pm-row-2">
       <div><label>Puesto</label><input type="text" id="pm-puesto"></div>
-      <div><label>Área</label><input type="text" id="pm-area"></div>
+      <div><label>Área</label><input type="text" id="pm-area" list="pm-areas-list" autocomplete="off"><datalist id="pm-areas-list"></datalist></div>
     </div>
+    <label>Zona de picking <span class="pm-sub">(puede tener más de una)</span></label>
+    <div class="pm-zonas" id="pm-zonas"></div>
+    <p class="hint" style="margin:6px 0 0;">La zona se guarda aparte del censo: el Excel de RR.HH. no la pisa.</p>
     <div class="pm-row-2">
       <div><label>Turno</label>
         <select id="pm-turno"><option value="">—</option><option value="MAÑANA">Mañana</option><option value="TARDE">Tarde</option><option value="NOCHE">Noche</option></select>
@@ -420,13 +443,14 @@ async function rpc(nombre, params){
 }
 
 /* ================= Filtros globales ================= */
-const filtros = { desde: monthStartISO(), hasta: todayISO(), area: "" };
+const filtros = { desde: monthStartISO(), hasta: todayISO(), area: "", zona: "" };
 document.getElementById("f-desde").value = filtros.desde;
 document.getElementById("f-hasta").value = filtros.hasta;
 document.getElementById("f-aplicar").addEventListener("click", () => {
   filtros.desde = document.getElementById("f-desde").value || filtros.desde;
   filtros.hasta = document.getElementById("f-hasta").value || filtros.hasta;
   filtros.area = document.getElementById("f-area").value || "";
+  filtros.zona = document.getElementById("f-zona").value || "";
   renderTabActivo();
 });
 
@@ -435,8 +459,62 @@ async function cargarAreas(){
     const areas = await rpc("asis_areas", {});
     const sel = document.getElementById("f-area");
     sel.innerHTML = '<option value="">Todas</option>' + (areas||[]).map(a => `<option value="${a}">${a}</option>`).join("");
+    // Misma lista como sugerencias al escribir el area en el modal de editar,
+    // para no terminar con "Estanteria" / "ESTANTERIA " como dos areas distintas.
+    document.getElementById("pm-areas-list").innerHTML = (areas||[]).map(a => `<option value="${a}"></option>`).join("");
   }catch(e){ console.error(e); }
 }
+
+/* ================= Zonas de picking (Mezzanine / Estanteria / Knapp) =================
+   Dato operativo propio (tabla asis_zonas_picking), NO viene del censo de RR.HH.:
+   una persona puede tener varias y el re-import diario del Excel no la pisa.
+   Para sumar una zona nueva basta agregarla a esta lista. */
+const ZONAS_PICKING = [
+  { key:"MEZZANINE",  label:"Mezzanine",  color:"#8B5CF6" },
+  { key:"ESTANTERIA", label:"Estantería", color:"#0EA5E9" },
+  { key:"KNAPP",      label:"Knapp",      color:"#14B8A6" },
+];
+let zonasMap = {}; // dni -> ["MEZZANINE", ...]
+const zonaDef = (key) => ZONAS_PICKING.find(z => z.key === key) || { key, label: key, color:"#7C8496" };
+const zonasDe = (dni) => zonasMap[dni] || [];
+
+async function cargarZonas(){
+  try{
+    const filas = await rpc("asis_zonas_listar", {});
+    zonasMap = {};
+    (filas||[]).forEach(f => { zonasMap[f.dni] = f.zonas || []; });
+  }catch(e){
+    // Si todavia no se aplico la migracion 0012 el panel sigue funcionando, solo sin zonas.
+    console.warn("asis_zonas_listar:", e && e.message ? e.message : e);
+  }
+}
+function zonasBadges(dni){
+  const z = zonasDe(dni);
+  if(!z.length) return `<span class="hora-pendiente">—</span>`;
+  return `<span class="zona-badges">${z.map(k => { const d = zonaDef(k); return `<span class="zona-badge" style="background:${d.color}22;color:${d.color};">${d.label}</span>`; }).join("")}</span>`;
+}
+const zonasTexto = (dni) => zonasDe(dni).map(k => zonaDef(k).label).join(" / ");
+
+// Filtro global "Zona picking": "" = todas, "PICKING" = cualquiera de las zonas, "NINGUNA" = sin zona.
+function pasaFiltroZona(dni, f = filtros.zona){
+  if(!f) return true;
+  const z = zonasDe(dni);
+  if(f === "PICKING") return z.length > 0;
+  if(f === "NINGUNA") return z.length === 0;
+  return z.includes(f);
+}
+const filtrarZona = (filas) => filtros.zona ? filas.filter(r => pasaFiltroZona(r.dni)) : filas;
+function etiquetaFiltro(base){
+  const partes = [];
+  if(filtros.area) partes.push(filtros.area);
+  if(filtros.zona) partes.push(filtros.zona === "PICKING" ? "Picking" : filtros.zona === "NINGUNA" ? "Sin zona" : zonaDef(filtros.zona).label);
+  return partes.join(" · ") || base;
+}
+const zonaOpcionesHtml = () =>
+  `<option value="">Todas</option><option value="PICKING">Picking (cualquiera)</option>` +
+  ZONAS_PICKING.map(z => `<option value="${z.key}">${z.label}</option>`).join("") +
+  `<option value="NINGUNA">Sin zona</option>`;
+document.getElementById("f-zona").innerHTML = zonaOpcionesHtml();
 
 /* ================= Tabs ================= */
 const charts = {};
@@ -510,6 +588,30 @@ async function loopVivo(){
   await tickVivo(false);
   feedTimer = setTimeout(loopVivo, 5000);
 }
+// "Picking hoy": por cada zona (Mezzanine / Estanteria / Knapp), cuantos de los
+// colaboradores asignados ya marcaron Ingreso. Cuenta a quien tenga varias zonas
+// en cada una de ellas.
+function pickingStripHtml(censo, marcas){
+  const activos = censo.filter(r => r.estado === "ACTIVO");
+  const conIngreso = new Set(marcas.filter(m => m.tipo === "ingreso").map(m => m.dni));
+  const hayAsignados = ZONAS_PICKING.some(z => activos.some(p => zonasDe(p.dni).includes(z.key)));
+  if(!hayAsignados){
+    return `<p class="hint" style="margin:0 0 18px;">Picking: todavía no hay colaboradores con zona asignada (Mezzanine / Estantería / Knapp). Se asigna en <strong>Personal → Editar</strong>.</p>`;
+  }
+  return `<div class="picking-title">Picking hoy — presentes / asignados</div>
+    <div class="picking-strip">${ZONAS_PICKING.map(z => {
+      const asignados = activos.filter(p => zonasDe(p.dni).includes(z.key));
+      const presentes = asignados.filter(p => conIngreso.has(p.dni)).length;
+      const pct = asignados.length ? Math.round(presentes/asignados.length*100) : 0;
+      return `<div class="picking-tile" style="border-left:3px solid ${z.color};">
+        <div><div class="zt" style="color:${z.color};">${z.label}</div>
+          <div class="zv">${presentes}<small> / ${asignados.length}</small></div>
+          <div class="zp">${asignados.length ? (asignados.length-presentes)+" sin marcar" : "sin colaboradores asignados"}</div></div>
+        <div class="zring" style="background:${z.color}22;color:${z.color};">${pct}%</div>
+      </div>`;
+    }).join("")}</div>`;
+}
+
 async function tickVivo(primeraVez){
   const hoy = todayISO();
   let censoHoy = [], marcasHoy = [];
@@ -522,6 +624,12 @@ async function tickVivo(primeraVez){
     document.getElementById("panel-vivo").innerHTML = `<div class="loading">Error: ${humanError(e)}</div>`;
     return;
   }
+
+  // La franja "Picking hoy" siempre muestra las 3 zonas completas (solo respeta
+  // el filtro de area), aunque el filtro de zona de abajo recorte el resto.
+  const pickingHtml = pickingStripHtml(censoHoy, marcasHoy);
+  censoHoy = filtrarZona(censoHoy);
+  marcasHoy = filtrarZona(marcasHoy);
 
   const activos = censoHoy.filter(r => r.estado === "ACTIVO");
   const totalActivos = activos.length;
@@ -544,13 +652,14 @@ async function tickVivo(primeraVez){
     vivoFiltroTexto = "";
     document.getElementById("panel-vivo").innerHTML = `
       <div class="kpi-grid">
-        ${kpiTile("Activos hoy", totalActivos, filtros.area || "Todas las áreas", "#3B82F6", "👥")}
+        ${kpiTile("Activos hoy", totalActivos, etiquetaFiltro("Todas las áreas"), "#3B82F6", "👥")}
         ${kpiTile("Marcaron ingreso", dniIngreso.size, totalActivos ? Math.round(dniIngreso.size/totalActivos*100)+"% del activo" : "", "#22C55E", "✅")}
         ${kpiTile("En almuerzo", enAlmuerzo, "salieron y no volvieron", "#F5A623", "🍽️")}
         ${kpiTile("Ya marcaron salida", dniSalida.size, "", "#A78BFA", "🚪")}
         ${kpiTile("Tardanzas hoy", tardanzas, "ingreso fuera de ventana", "#FF3B4E", "⚠️")}
         ${kpiTile("Ausentes (aún)", Math.max(0,ausentes), "activos sin ingreso marcado", "#7C8496", "❌")}
       </div>
+      <div id="picking-strip">${pickingHtml}</div>
       <div class="card">
         <div class="card-header-row">
           <div><h3>Marcaciones — hoy</h3>
@@ -567,8 +676,10 @@ async function tickVivo(primeraVez){
   }else{
     // Solo actualiza KPIs + agrega filas nuevas al feed (evita "parpadeo" del resto).
     const kpiGrid = document.querySelector("#panel-vivo .kpi-grid");
+    const pickingEl = document.getElementById("picking-strip");
+    if(pickingEl) pickingEl.innerHTML = pickingHtml;
     if(kpiGrid) kpiGrid.innerHTML = `
-      ${kpiTile("Activos hoy", totalActivos, filtros.area || "Todas las áreas", "#3B82F6", "👥")}
+      ${kpiTile("Activos hoy", totalActivos, etiquetaFiltro("Todas las áreas"), "#3B82F6", "👥")}
       ${kpiTile("Marcaron ingreso", dniIngreso.size, totalActivos ? Math.round(dniIngreso.size/totalActivos*100)+"% del activo" : "", "#22C55E", "✅")}
       ${kpiTile("En almuerzo", enAlmuerzo, "salieron y no volvieron", "#F5A623", "🍽️")}
       ${kpiTile("Ya marcaron salida", dniSalida.size, "", "#A78BFA", "🚪")}
@@ -643,7 +754,7 @@ function renderFeedList(marcas, filtroTexto){
   ultimasFilasVivo = filas;
 
   const q = vivoFiltroTexto.toLowerCase().trim();
-  const filasFiltradas = !q ? filas : filas.filter(f => [f.nombre, f.dni, f.area, f.turno].some(v => (v||"").toLowerCase().includes(q)));
+  const filasFiltradas = !q ? filas : filas.filter(f => [f.nombre, f.dni, f.area, f.turno, zonasTexto(f.dni)].some(v => (v||"").toLowerCase().includes(q)));
 
   if(!filasFiltradas.length){ list.innerHTML = `<div class="feed-empty">Sin resultados para "${vivoFiltroTexto}".</div>`; return; }
 
@@ -651,7 +762,7 @@ function renderFeedList(marcas, filtroTexto){
     <div class="table-scroll">
       <table>
         <thead><tr>
-          <th>Colaborador</th><th>Área · Turno</th>
+          <th>Colaborador</th><th>Área · Turno</th><th>Zona picking</th>
           <th class="num">Ingreso</th><th class="num">Salida almuerzo</th><th class="num">Retorno almuerzo</th><th class="num">Salida</th>
         </tr></thead>
         <tbody>
@@ -659,6 +770,7 @@ function renderFeedList(marcas, filtroTexto){
             <tr class="${f.tarde > 0 ? "fila-tardanza" : ""}">
               <td class="nombre">${avatarHtml(f.nombre)}${f.nombre}</td>
               <td class="meta">${[f.area, f.turno].filter(Boolean).join(" · ") || "—"}</td>
+              <td>${zonasBadges(f.dni)}</td>
               <td class="num">${celdaIngresoConTardanza(f.horas.ingreso, f.turno)}</td>
               <td class="num">${celdaHora(f.horas.almuerzo_inicio, "almuerzo")}</td>
               <td class="num">${celdaHora(f.horas.almuerzo_fin, "almuerzo")}</td>
@@ -674,7 +786,7 @@ function renderFeedList(marcas, filtroTexto){
 function exportarVivoExcel(){
   if(!ultimasFilasVivo.length) return;
   const rows = ultimasFilasVivo.map(f => ({
-    DNI: f.dni, Colaborador: f.nombre, Área: f.area || "", Turno: f.turno || "",
+    DNI: f.dni, Colaborador: f.nombre, Área: f.area || "", "Zona picking": zonasTexto(f.dni), Turno: f.turno || "",
     Ingreso: f.horas.ingreso ? fmtHora(f.horas.ingreso) : "",
     "Min. tardanza": f.tarde || 0,
     "Salida almuerzo": f.horas.almuerzo_inicio ? fmtHora(f.horas.almuerzo_inicio) : "",
@@ -704,8 +816,14 @@ async function renderAusentismo(){
     ]);
   }catch(e){ panel.innerHTML = `<div class="loading">Error: ${humanError(e)}</div>`; return; }
 
+  const censoSinFiltroZona = censo.length;
+  censo = filtrarZona(censo);
+  marcas = filtrarZona(marcas);
+
   if(!censo.length){
-    panel.innerHTML = `<div class="banner">No hay censo importado para ${fmtFecha(filtros.desde)} → ${fmtFecha(filtros.hasta)}${filtros.area ? " en "+filtros.area : ""}. Prueba otro rango de fechas o confirma con RR.HH. que ese período ya fue importado.</div>`;
+    panel.innerHTML = censoSinFiltroZona
+      ? `<div class="banner">Ningún colaborador del censo cumple el filtro de zona "${etiquetaFiltro("")}" en ${fmtFecha(filtros.desde)} → ${fmtFecha(filtros.hasta)}. Asigna zonas en Personal → Editar o cambia el filtro.</div>`
+      : `<div class="banner">No hay censo importado para ${fmtFecha(filtros.desde)} → ${fmtFecha(filtros.hasta)}${filtros.area ? " en "+filtros.area : ""}. Prueba otro rango de fechas o confirma con RR.HH. que ese período ya fue importado.</div>`;
     return;
   }
 
@@ -720,6 +838,7 @@ async function renderAusentismo(){
   const ausenciasDetalle = [];
   const porFechaTasa = {};
   const porAreaCont = {}; // area -> {activos, presentes}
+  const porZonaCont = {}; // zona de picking -> {activos, presentes} (quien tiene varias cuenta en cada una)
   fechas.forEach(f => {
     const activos = porFechaActivos[f];
     const marcaron = porFechaIngreso[f] || new Set();
@@ -734,12 +853,20 @@ async function renderAusentismo(){
       (porAreaCont[a] ||= { activos:0, presentes:0 });
       porAreaCont[a].activos++;
       if(marcaron.has(p.dni)) porAreaCont[a].presentes++;
+      zonasDe(p.dni).forEach(z => {
+        (porZonaCont[z] ||= { activos:0, presentes:0 });
+        porZonaCont[z].activos++;
+        if(marcaron.has(p.dni)) porZonaCont[z].presentes++;
+      });
     });
   });
   const totalAusentesDia = totalActivosDia - totalPresentesDia;
   const tasaAusentismo = totalActivosDia ? (totalAusentesDia/totalActivosDia*100).toFixed(1) : "0.0";
   const areasSorted = Object.entries(porAreaCont)
     .map(([a,c]) => [a, c, c.activos ? (c.activos-c.presentes)/c.activos*100 : 0])
+    .sort((a,b) => b[2]-a[2]);
+  const zonasSorted = Object.entries(porZonaCont)
+    .map(([k,c]) => [k, c, c.activos ? (c.activos-c.presentes)/c.activos*100 : 0])
     .sort((a,b) => b[2]-a[2]);
 
   ultimasAusenciasDetalle = ausenciasDetalle.sort((a,b) => b.fecha.localeCompare(a.fecha) || a.nombre.localeCompare(b.nombre));
@@ -760,6 +887,18 @@ async function renderAusentismo(){
       <div class="chart-box"><canvas id="ch-ausent-diario"></canvas></div></div>
     <div class="card"><h3>Ausentismo por área</h3><p class="hint">Ordenado de mayor a menor.</p>
       <div class="chart-box" style="height:${Math.max(220, areasSorted.length*38)}px;"><canvas id="ch-ausent-area"></canvas></div></div>
+    <div class="card"><h3>Ausentismo por zona de picking</h3>
+      <p class="hint">Mezzanine, Estantería y Knapp. Quien tiene más de una zona cuenta en cada una.</p>
+      ${zonasSorted.length ? `
+      <div class="table-scroll"><table>
+        <thead><tr><th>Zona</th><th class="num">Activos (persona-día)</th><th class="num">Marcaron ingreso</th><th class="num">Ausentes</th><th class="num">% ausentismo</th></tr></thead>
+        <tbody>${zonasSorted.map(([k,c,pct]) => { const d = zonaDef(k); return `
+          <tr><td><span class="zona-badge" style="background:${d.color}22;color:${d.color};">${d.label}</span></td>
+          <td class="num">${c.activos}</td><td class="num">${c.presentes}</td><td class="num">${c.activos-c.presentes}</td>
+          <td class="num" style="font-weight:700;">${pct.toFixed(1)}%</td></tr>`; }).join("")}
+        </tbody></table></div>`
+      : `<div class="feed-empty">Todavía no hay colaboradores con zona de picking asignada. Se asigna en <strong>Personal → Editar</strong>.</div>`}
+    </div>
     <div class="card">
       <div class="card-header-row">
         <div><h3>Detalle de ausencias</h3><p class="hint">Colaboradores activos que no marcaron Ingreso ese día.</p></div>
@@ -818,7 +957,7 @@ function pintarDetalleAusencias(filas, filtroTexto){
   const list = document.getElementById("ausencias-lista");
   if(!list) return;
   const q = (filtroTexto||"").toLowerCase().trim();
-  const filtradas = !q ? filas : filas.filter(f => [f.nombre, f.dni, f.area, f.turno].some(v => (v||"").toLowerCase().includes(q)));
+  const filtradas = !q ? filas : filas.filter(f => [f.nombre, f.dni, f.area, f.turno, zonasTexto(f.dni)].some(v => (v||"").toLowerCase().includes(q)));
 
   if(!filas.length){ list.innerHTML = `<div class="feed-empty">Sin ausencias en este rango — todos los activos marcaron Ingreso.</div>`; return; }
   if(!filtradas.length){ list.innerHTML = `<div class="feed-empty">Sin resultados para "${filtroTexto}".</div>`; return; }
@@ -826,13 +965,14 @@ function pintarDetalleAusencias(filas, filtroTexto){
   list.innerHTML = `
     <div class="table-scroll" style="max-height:420px;">
       <table>
-        <thead><tr><th>Fecha</th><th>Colaborador</th><th>Área · Turno</th><th>Puesto</th></tr></thead>
+        <thead><tr><th>Fecha</th><th>Colaborador</th><th>Área · Turno</th><th>Zona picking</th><th>Puesto</th></tr></thead>
         <tbody>
           ${filtradas.map(f => `
             <tr>
               <td class="meta">${fmtFecha(f.fecha)}</td>
               <td class="nombre">${avatarHtml(f.nombre)}${f.nombre}</td>
               <td class="meta">${[f.area, f.turno].filter(Boolean).join(" · ") || "—"}</td>
+              <td>${zonasBadges(f.dni)}</td>
               <td class="meta">${f.puesto || "—"}</td>
             </tr>
           `).join("")}
@@ -844,7 +984,7 @@ function pintarDetalleAusencias(filas, filtroTexto){
 function exportarAusenciasExcel(){
   if(!ultimasAusenciasDetalle.length) return;
   const rows = ultimasAusenciasDetalle.map(f => ({
-    Fecha: f.fecha, DNI: f.dni, Colaborador: f.nombre, Área: f.area || "", Turno: f.turno || "", Puesto: f.puesto || "",
+    Fecha: f.fecha, DNI: f.dni, Colaborador: f.nombre, Área: f.area || "", "Zona picking": zonasTexto(f.dni), Turno: f.turno || "", Puesto: f.puesto || "",
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
@@ -859,6 +999,7 @@ async function renderRotacion(){
   let censo;
   try{ censo = await rpc("asis_censo", { p_desde: filtros.desde, p_hasta: filtros.hasta, p_area: filtros.area || null }); }
   catch(e){ panel.innerHTML = `<div class="loading">Error: ${humanError(e)}</div>`; return; }
+  censo = filtrarZona(censo);
 
   const porDni = {};
   censo.forEach(r => { porDni[r.dni] ||= r; });
@@ -880,7 +1021,7 @@ async function renderRotacion(){
       ${kpiTile("Altas", altas.length, "ingresos en el período", "#22C55E", "📥")}
       ${kpiTile("Bajas", bajas.length, "ceses en el período", "#FF3B4E", "📤")}
       ${kpiTile("Tasa de rotación", tasaRotacion+"%", "bajas / dotación activa", "#F5A623", "🔁")}
-      ${kpiTile("Dotación activa", activosPromedio, filtros.area || "todas las áreas", "#3B82F6", "👥")}
+      ${kpiTile("Dotación activa", activosPromedio, etiquetaFiltro("todas las áreas"), "#3B82F6", "👥")}
     </div>
     <div class="card"><h3>Altas vs. Bajas por fecha</h3>
       ${fechasAll.length
@@ -922,6 +1063,7 @@ async function renderGeneral(){
   let marcas;
   try{ marcas = await rpc("asis_reporte", { p_desde: filtros.desde, p_hasta: filtros.hasta, p_area: filtros.area || null }); }
   catch(e){ panel.innerHTML = `<div class="loading">Error: ${humanError(e)}</div>`; return; }
+  marcas = filtrarZona(marcas);
 
   const ingresos = marcas.filter(m => m.tipo === "ingreso");
   let aTiempo = 0, tarde = 0, minutosTardeTotal = 0;
@@ -1019,7 +1161,7 @@ function pintarDetalleGeneral(filas, filtroTexto){
   const list = document.getElementById("general-lista");
   if(!list) return;
   const q = (filtroTexto||"").toLowerCase().trim();
-  const filtradas = !q ? filas : filas.filter(f => [f.nombre, f.dni, f.area, f.turno].some(v => (v||"").toLowerCase().includes(q)));
+  const filtradas = !q ? filas : filas.filter(f => [f.nombre, f.dni, f.area, f.turno, zonasTexto(f.dni)].some(v => (v||"").toLowerCase().includes(q)));
 
   if(!filas.length){ list.innerHTML = `<div class="feed-empty">Sin marcaciones en este rango de fechas.</div>`; return; }
   if(!filtradas.length){ list.innerHTML = `<div class="feed-empty">Sin resultados para "${filtroTexto}".</div>`; return; }
@@ -1028,7 +1170,7 @@ function pintarDetalleGeneral(filas, filtroTexto){
     <div class="table-scroll" style="max-height:480px;">
       <table>
         <thead><tr>
-          <th>Fecha</th><th>Colaborador</th><th>Área · Turno</th>
+          <th>Fecha</th><th>Colaborador</th><th>Área · Turno</th><th>Zona picking</th>
           <th class="num">Ingreso</th><th class="num">Salida almuerzo</th><th class="num">Retorno almuerzo</th><th class="num">Salida</th>
         </tr></thead>
         <tbody>
@@ -1039,6 +1181,7 @@ function pintarDetalleGeneral(filas, filtroTexto){
               <td class="meta">${fmtFecha(f.fecha)}</td>
               <td class="nombre">${avatarHtml(f.nombre)}${f.nombre}</td>
               <td class="meta">${[f.area, f.turno].filter(Boolean).join(" · ") || "—"}</td>
+              <td>${zonasBadges(f.dni)}</td>
               <td class="num">${celdaIngresoConTardanza(f.horas.ingreso, f.turno)}</td>
               <td class="num">${celdaHora(f.horas.almuerzo_inicio, "almuerzo")}</td>
               <td class="num">${celdaHora(f.horas.almuerzo_fin, "almuerzo")}</td>
@@ -1054,7 +1197,7 @@ function pintarDetalleGeneral(filas, filtroTexto){
 function exportarGeneralExcel(filas){
   if(!filas.length) return;
   const rows = filas.map(f => ({
-    Fecha: f.fecha, DNI: f.dni, Colaborador: f.nombre, Área: f.area || "", Turno: f.turno || "",
+    Fecha: f.fecha, DNI: f.dni, Colaborador: f.nombre, Área: f.area || "", "Zona picking": zonasTexto(f.dni), Turno: f.turno || "",
     Ingreso: f.horas.ingreso ? fmtHora(f.horas.ingreso) : "",
     "Min. tardanza": minutosTarde(f.horas.ingreso, f.turno),
     "Salida almuerzo": f.horas.almuerzo_inicio ? fmtHora(f.horas.almuerzo_inicio) : "",
@@ -1090,7 +1233,8 @@ async function renderPersonal(){
       <h3>Personal</h3>
       <p class="hint">Foto tomada durante el enrolamiento en el kiosco — no es la usada para reconocer (esa es un vector numérico, no se puede ver).</p>
       <div class="personal-toolbar">
-        <input type="text" id="personal-buscar" placeholder="Buscar por nombre, DNI o área…">
+        <input type="text" id="personal-buscar" placeholder="Buscar por nombre, DNI, área o zona…">
+        <select id="personal-zona" title="Filtrar por zona de picking" style="background:var(--panel-alt);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 10px;font-size:12.5px;">${zonaOpcionesHtml()}</select>
         <label style="font-size:11.5px;color:var(--muted);"><input type="checkbox" id="personal-solo-pendientes" style="margin-right:5px;">Solo pendientes</label>
         <button class="btn-sm" style="margin-left:auto;" onclick="abrirPersonalModal(null)">+ Agregar colaborador</button>
       </div>
@@ -1102,6 +1246,7 @@ async function renderPersonal(){
   const soloPendientes = document.getElementById("personal-solo-pendientes");
   buscarInput.addEventListener("input", pintarPersonalGrid);
   soloPendientes.addEventListener("change", pintarPersonalGrid);
+  document.getElementById("personal-zona").addEventListener("change", pintarPersonalGrid);
   pintarPersonalGrid();
 }
 function pintarPersonalGrid(){
@@ -1109,9 +1254,11 @@ function pintarPersonalGrid(){
   if(!grid) return;
   const q = (document.getElementById("personal-buscar").value || "").toLowerCase().trim();
   const soloPend = document.getElementById("personal-solo-pendientes").checked;
+  const zonaSel = document.getElementById("personal-zona").value;
   const lista = personalData
     .filter(p => !soloPend || !p.enrolado)
-    .filter(p => !q || [p.nombre, p.dni, p.area, p.puesto].some(v => (v||"").toLowerCase().includes(q)))
+    .filter(p => pasaFiltroZona(p.dni, zonaSel))
+    .filter(p => !q || [p.nombre, p.dni, p.area, p.puesto, zonasTexto(p.dni)].some(v => (v||"").toLowerCase().includes(q)))
     .sort((a,b) => (a.enrolado === b.enrolado ? a.nombre.localeCompare(b.nombre) : (a.enrolado ? 1 : -1)));
 
   if(!lista.length){ grid.innerHTML = `<div class="feed-empty">Sin resultados.</div>`; return; }
@@ -1123,6 +1270,7 @@ function pintarPersonalGrid(){
         : `<div class="persona-foto placeholder">${p.enrolado ? '🧑' : '❔'}</div>`}
       <div class="nombre">${p.nombre}</div>
       <div class="meta">${p.dni} · ${[p.area, p.turno].filter(Boolean).join(" · ")}</div>
+      ${zonasDe(p.dni).length ? `<div style="margin-bottom:8px;">${zonasBadges(p.dni)}</div>` : ""}
       <span class="estado-pill ${p.enrolado ? 'ok' : 'pend'}">${p.enrolado ? '✅ Enrolado' : '⏳ Pendiente'}</span>
       <div style="display:flex;gap:6px;margin-top:10px;">
         <button class="btn-sm" style="flex:1;" onclick='abrirPersonalModal(${JSON.stringify(p).replace(/'/g,"&apos;")})'>✏️ Editar</button>
@@ -1157,6 +1305,12 @@ function abrirPersonalModal(persona){
   document.getElementById("pm-area").value = persona ? (persona.area || "") : "";
   document.getElementById("pm-turno").value = persona ? (persona.turno || "") : "";
   document.getElementById("pm-estado").value = "ACTIVO"; // este panel solo lista activos; si vuelve a abrir ya sera un alta
+  // Zonas de picking: las definidas en ZONAS_PICKING + cualquier otra que la persona ya tuviera
+  // (para que guardar no se la borre en silencio).
+  const actuales = persona ? zonasDe(persona.dni) : [];
+  const claves = [...new Set([...ZONAS_PICKING.map(z => z.key), ...actuales])];
+  document.getElementById("pm-zonas").innerHTML = claves.map(k =>
+    `<label><input type="checkbox" value="${k}" ${actuales.includes(k) ? "checked" : ""}>${zonaDef(k).label}</label>`).join("");
   document.getElementById("pm-status").textContent = "";
   document.getElementById("pm-status").className = "pm-status";
   document.getElementById("personal-modal").classList.add("show");
@@ -1184,6 +1338,18 @@ async function guardarPersonalModal(){
       p_turno: document.getElementById("pm-turno").value || null,
       p_estado: document.getElementById("pm-estado").value,
     });
+    // Zonas de picking: tabla aparte (el re-import de RR.HH. no la pisa). Si falla, los datos
+    // de arriba ya quedaron guardados -- se avisa distinto para no hacer creer que se perdio todo.
+    const zonasSel = [...document.querySelectorAll("#pm-zonas input:checked")].map(i => i.value);
+    try{
+      await rpc("asis_zonas_guardar", { p_dni: dni, p_zonas: zonasSel });
+      await cargarZonas();
+    }catch(ez){
+      statusEl.className = "pm-status bad";
+      statusEl.textContent = "Se guardaron los datos, pero no las zonas de picking: " + humanError(ez) + " (¿ya aplicaste la migración 0012?)";
+      await renderPersonal();
+      return;
+    }
     cerrarPersonalModal();
     await renderPersonal();
   }catch(e){
@@ -1305,7 +1471,7 @@ async function iniciarApp(){
   document.getElementById("app").classList.add("show");
   document.getElementById("user-nombre").textContent = session.nombre || session.username || "—";
   document.getElementById("user-rol").textContent = ROLE_LABELS[session.rol] || session.rol || "—";
-  await cargarAreas();
+  await Promise.all([cargarAreas(), cargarZonas()]);
   renderTabActivo();
 }
 
