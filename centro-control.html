@@ -842,6 +842,8 @@ async function tickVivo(primeraVez, gen){
 
   const activos = censoHoy.filter(r => r.estado === "ACTIVO");
   const totalActivos = activos.length;
+  const cambioActivos = activos.length !== ultimosActivosVivo.length;
+  ultimosActivosVivo = activos;
   const dniIngreso = new Set(marcasHoy.filter(m => m.tipo === "ingreso").map(m => m.dni));
   const dniAlmuerzoFuera = new Set(marcasHoy.filter(m => m.tipo === "almuerzo_inicio").map(m => m.dni));
   const dniAlmuerzoVuelta = new Set(marcasHoy.filter(m => m.tipo === "almuerzo_fin").map(m => m.dni));
@@ -858,7 +860,7 @@ async function tickVivo(primeraVez, gen){
 
   if(primeraVez){
     feedIdsVistos = new Set(marcasHoy.map(m => m.id));
-    vivoFiltroTexto = "";
+    vivoFiltroTexto = ""; vivoSoloMarcaron = false;
     document.getElementById("panel-vivo").innerHTML = `
       <div class="kpi-grid">
         ${kpiTile("Activos hoy", totalActivos, etiquetaFiltro("Todas las áreas"), "#3B82F6", "👥")}
@@ -872,15 +874,19 @@ async function tickVivo(primeraVez, gen){
       <div class="card">
         <div class="card-header-row">
           <div><h3>Marcaciones — hoy</h3>
-          <p class="hint">Una fila por colaborador; la hora queda registrada en su columna apenas marca. Se actualiza sola cada 5s.</p></div>
+          <p class="hint">Todo el personal activo en orden alfabético; la hora queda registrada en su columna apenas marca (— si aún no marca). Se actualiza sola cada 5s.</p></div>
           <button class="btn-sm" id="btn-exportar-vivo">⬇ Exportar Excel</button>
         </div>
-        <input type="text" id="vivo-buscar" class="vivo-buscar" placeholder="Buscar colaborador, área o turno…">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;column-gap:16px;">
+          <input type="text" id="vivo-buscar" class="vivo-buscar" placeholder="Buscar colaborador, área o turno…">
+          <label class="pk-check" style="padding:0;"><input type="checkbox" id="vivo-solo-marcaron">Solo los que ya marcaron</label>
+        </div>
         <div id="feed-list"></div>
       </div>
     `;
     document.getElementById("btn-exportar-vivo").addEventListener("click", exportarVivoExcel);
     document.getElementById("vivo-buscar").addEventListener("input", (e) => renderFeedList(ultimasMarcasVivo, e.target.value));
+    document.getElementById("vivo-solo-marcaron").addEventListener("change", (e) => { vivoSoloMarcaron = e.target.checked; renderFeedList(ultimasMarcasVivo); });
     renderFeedList(marcasHoy);
   }else{
     // Solo actualiza KPIs + agrega filas nuevas al feed (evita "parpadeo" del resto).
@@ -896,7 +902,7 @@ async function tickVivo(primeraVez, gen){
       ${kpiTile("Ausentes (aún)", Math.max(0,ausentes), "activos sin ingreso marcado", "#7C8496", "❌")}
     `;
     const nuevas = marcasHoy.filter(m => !feedIdsVistos.has(m.id));
-    if(nuevas.length){
+    if(nuevas.length || cambioActivos){
       nuevas.forEach(m => feedIdsVistos.add(m.id));
       renderFeedList(marcasHoy);
     }
@@ -915,7 +921,9 @@ function minutosTarde(iso, turno){
 
 let ultimasFilasVivo = []; // para el boton de exportar (siempre completo, sin filtro de busqueda)
 let ultimasMarcasVivo = []; // para poder re-filtrar sin re-pedir datos al escribir en el buscador
+let ultimosActivosVivo = []; // personal activo de hoy (censo con los filtros de Area/Zona): la lista muestra a todos, hayan marcado o no
 let vivoFiltroTexto = "";
+let vivoSoloMarcaron = false;
 
 const AVATAR_PALETA = ["#3B82F6","#22C55E","#F5A623","#A78BFA","#22D3EE","#FF3B4E","#0EA5E9","#84CC16"];
 function iniciales(nombre){
@@ -947,26 +955,32 @@ function renderFeedList(marcas, filtroTexto){
   if(!list) return;
   ultimasMarcasVivo = marcas;
   if(filtroTexto !== undefined) vivoFiltroTexto = filtroTexto;
-  if(!marcas.length){ list.innerHTML = `<div class="feed-empty">Todavía no hay marcaciones hoy.</div>`; ultimasFilasVivo = []; return; }
+  if(!ultimosActivosVivo.length && !marcas.length){ list.innerHTML = `<div class="feed-empty">No hay personal activo para mostrar con el filtro actual.</div>`; ultimasFilasVivo = []; return; }
 
   // Una fila por colaborador con sus 4 horarios como columnas, no una fila
   // por evento -- asi queda visible de un vistazo el control del dia
   // completo (ingreso / salida almuerzo / retorno almuerzo / salida).
+  // Se lista TODO el personal activo (no solo quien ya marco), en orden alfabetico: quien aun no marca (o no
+  // esta enrolado) figura con "—" en vez de desaparecer de la lista.
   const porDni = {};
+  ultimosActivosVivo.forEach(p => { porDni[p.dni] = { dni:p.dni, nombre:p.nombre, area:p.area, turno:p.turno, horas:{}, ultimo:null }; });
   marcas.forEach(m => {
-    if(!porDni[m.dni]) porDni[m.dni] = { dni:m.dni, nombre:m.nombre, area:m.area, turno:m.turno, horas:{}, ultimo:m.registrado_en };
+    if(!porDni[m.dni]) porDni[m.dni] = { dni:m.dni, nombre:m.nombre, area:m.area, turno:m.turno, horas:{}, ultimo:null };
     porDni[m.dni].horas[m.tipo] = m.registrado_en;
-    if(new Date(m.registrado_en) > new Date(porDni[m.dni].ultimo)) porDni[m.dni].ultimo = m.registrado_en;
+    if(!porDni[m.dni].ultimo || new Date(m.registrado_en) > new Date(porDni[m.dni].ultimo)) porDni[m.dni].ultimo = m.registrado_en;
   });
   const filas = Object.values(porDni).map(f => ({ ...f, tarde: minutosTarde(f.horas.ingreso, f.turno) }))
-    .sort((a,b) => new Date(b.ultimo) - new Date(a.ultimo));
+    .sort((a,b) => cmpNombre(a.nombre, b.nombre));
   ultimasFilasVivo = filas;
 
   const q = vivoFiltroTexto.toLowerCase().trim();
-  const filasFiltradas = !q ? filas : filas.filter(f => [f.nombre, f.dni, f.area, f.turno, zonasTexto(f.dni)].some(v => (v||"").toLowerCase().includes(q)));
+  const filasFiltradas = filas
+    .filter(f => !vivoSoloMarcaron || f.ultimo)
+    .filter(f => !q || [f.nombre, f.dni, f.area, f.turno, zonasTexto(f.dni)].some(v => (v||"").toLowerCase().includes(q)));
 
-  if(!filasFiltradas.length){ list.innerHTML = `<div class="feed-empty">Sin resultados para "${vivoFiltroTexto}".</div>`; return; }
+  if(!filasFiltradas.length){ list.innerHTML = `<div class="feed-empty">${q ? `Sin resultados para "${escHtml(vivoFiltroTexto)}".` : vivoSoloMarcaron ? "Todavía nadie ha marcado hoy." : "No hay personal activo para mostrar."}</div>`; return; }
 
+  const scrollPrevio = (list.querySelector(".table-scroll") || {}).scrollTop || 0;   // no perder el lugar al refrescar
   list.innerHTML = `
     <div class="table-scroll">
       <table>
@@ -990,6 +1004,8 @@ function renderFeedList(marcas, filtroTexto){
       </table>
     </div>
   `;
+  const nuevoScroll = list.querySelector(".table-scroll");
+  if(nuevoScroll) nuevoScroll.scrollTop = scrollPrevio;
 }
 
 function exportarVivoExcel(){
