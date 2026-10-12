@@ -487,6 +487,12 @@ function humanError(err, extra){
     FUNCION_NO_ENCONTRADA:"La función ya no existe.", FECHA_FUERA_DE_RANGO:"Solo se puede asignar entre 14 días atrás y mañana.", ...extra };
   return MSGS[code] || (err && err.message) || "Error desconocido.";
 }
+// Orden alfabético en español para toda lista de personas: la Ñ va después de la N, las tildes y mayúsculas no
+// alteran el orden y las comas de "APELLIDOS, NOMBRES" no cuentan; el espacio sí ordena (ALVA ZEVALLOS va antes que ALVAREZ).
+// (El orden de la base de datos no es fiable.)
+const colNombre = new Intl.Collator("es", { sensitivity: "base" });
+const limpiaNombre = (s) => String(s ?? "").replace(/[,.;]/g, " ").replace(/\s+/g, " ").trim();
+const cmpNombre = (a, b) => colNombre.compare(limpiaNombre(a), limpiaNombre(b));
 const escHtml = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let toastTimer = null;
 function toast(msg, malo){
@@ -1083,7 +1089,7 @@ async function renderAusentismo(){
     .map(([k,c]) => [k, c, c.activos ? (c.activos-c.presentes)/c.activos*100 : 0])
     .sort((a,b) => b[2]-a[2]);
 
-  ultimasAusenciasDetalle = ausenciasDetalle.sort((a,b) => b.fecha.localeCompare(a.fecha) || a.nombre.localeCompare(b.nombre));
+  ultimasAusenciasDetalle = ausenciasDetalle.sort((a,b) => b.fecha.localeCompare(a.fecha) || cmpNombre(a.nombre, b.nombre));
 
   // Clasificacion RR.HH. (A/V/F/FJ) -- complementaria, puede no existir.
   const conCodigo = censo.filter(r => r.asistencia);
@@ -1264,7 +1270,7 @@ async function renderRotacion(){
       </div>
       <div class="card"><h3>Detalle de bajas</h3>
         <div class="table-scroll"><table><thead><tr><th>DNI</th><th>Nombre</th><th>Área</th><th>Fecha cese</th><th>Motivo</th></tr></thead>
-        <tbody>${bajas.sort((a,b) => b.f_baja.localeCompare(a.f_baja) || a.nombre.localeCompare(b.nombre)).map(r=>`<tr><td>${r.dni}</td><td>${r.nombre}</td><td>${r.area||"—"}</td><td>${fmtFecha(r.f_baja)}${r.sinFechaCese ? " *" : ""}</td><td>${r.motivo_cese||"—"}</td></tr>`).join("") || '<tr><td colspan="5" class="hint">Sin bajas en el período.</td></tr>'}</tbody></table></div>
+        <tbody>${bajas.sort((a,b) => b.f_baja.localeCompare(a.f_baja) || cmpNombre(a.nombre, b.nombre)).map(r=>`<tr><td>${r.dni}</td><td>${r.nombre}</td><td>${r.area||"—"}</td><td>${fmtFecha(r.f_baja)}${r.sinFechaCese ? " *" : ""}</td><td>${r.motivo_cese||"—"}</td></tr>`).join("") || '<tr><td colspan="5" class="hint">Sin bajas en el período.</td></tr>'}</tbody></table></div>
         ${bajas.some(r => r.sinFechaCese) ? `<p class="hint" style="margin:10px 0 0;">* Sin fecha de cese cargada por RR.HH.: se toma el día en que la persona dejó de figurar como activa en el censo (puede ser posterior a su salida real si el listado no se actualizó antes).</p>` : ""}
       </div>
     </div>
@@ -1338,7 +1344,7 @@ async function renderGeneral(){
     if(!porDniFecha2[k]) porDniFecha2[k] = { dni:m.dni, nombre:m.nombre, area:m.area, turno:m.turno, fecha:m.fecha, horas:{} };
     porDniFecha2[k].horas[m.tipo] = m.registrado_en;
   });
-  const filasGeneral = Object.values(porDniFecha2).sort((a,b) => b.fecha.localeCompare(a.fecha) || a.nombre.localeCompare(b.nombre));
+  const filasGeneral = Object.values(porDniFecha2).sort((a,b) => b.fecha.localeCompare(a.fecha) || cmpNombre(a.nombre, b.nombre));
 
   panel.innerHTML = `
     <div class="kpi-grid">
@@ -1496,7 +1502,7 @@ function pintarPersonalGrid(){
   const lista = personalBase
     .filter(p => !soloPend || !p.enrolado)
     .filter(p => !q || [p.nombre, p.dni, p.area, p.puesto, zonasTexto(p.dni)].some(v => (v||"").toLowerCase().includes(q)))
-    .sort((a,b) => (a.enrolado === b.enrolado ? a.nombre.localeCompare(b.nombre) : (a.enrolado ? 1 : -1)));
+    .sort((a,b) => cmpNombre(a.nombre, b.nombre));   // alfabético; para ver solo los pendientes está la casilla "Solo pendientes"
 
   if(!lista.length){
     grid.innerHTML = `<div class="feed-empty">${(filtros.area || filtros.zona) && !personalBase.length
@@ -1785,7 +1791,7 @@ function pkEnAlcance(dni, area){
   return pk.areasCfg && pk.areasCfg.size ? pk.areasCfg.has(normArea(area)) : !!zonaDeArea(area);
 }
 function pkSetFilas(filas){
-  pk.todas = filas || [];
+  pk.todas = (filas || []).slice().sort((a, b) => cmpNombre(a.nombre, b.nombre));
   registrarAreas(pk.todas);
   pk.filas = pk.todas.filter(p => pkEnAlcance(p.dni, p.area));
 }
@@ -2367,8 +2373,7 @@ function pkDatosPorPersona(){
   if(!pk.soloConAsig){   // incluir también a quien no tuvo función en el período (para ver los huecos)
     pkPorSupervisor(pkBase()).forEach(p => { if(!personas.has(p.dni)) personas.set(p.dni, { dni: p.dni, nombre: p.nombre, turno: p.turno, supervisor: p.supervisor, area: p.area, ult: "", dias: {} }); });
   }
-  const lista = [...personas.values()].sort((a, b) =>
-    (normNombre(a.supervisor) || "~").localeCompare(normNombre(b.supervisor) || "~", "es") || String(a.nombre).localeCompare(String(b.nombre), "es"));
+  const lista = [...personas.values()].sort((a, b) => cmpNombre(a.nombre, b.nombre));   // alfabético (el supervisor se ve en su columna y se puede filtrar)
   lista.forEach(p => { p.nDias = fechas.filter(f => p.dias[f]).length; });
   return { fechas, lista };
 }
