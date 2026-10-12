@@ -271,6 +271,33 @@
   .pk-pill{display:inline-block;padding:3px 11px;border-radius:999px;font-size:11.5px;font-weight:700;white-space:nowrap;}
   .pk-resumen tbody tr{cursor:pointer;}
   .pk-resumen tbody tr.on{background:var(--red-tint)!important;}
+  .pk-seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;flex-shrink:0;}
+  .pk-seg button{background:var(--panel-alt);border:none;padding:7px 13px;font-size:12px;font-weight:600;color:var(--text-soft);cursor:pointer;white-space:nowrap;}
+  .pk-seg button + button{border-left:1px solid var(--border);}
+  .pk-seg button.on{background:var(--red);color:#fff;font-weight:700;}
+  .pk-hd-tools{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px;}
+  .pk-hd-tools select{background:var(--panel-alt);}
+  .pk-leyenda{display:flex;flex-wrap:wrap;gap:8px 14px;margin:0 0 10px;font-size:11.5px;color:var(--text-soft);}
+  .pk-leyenda span{display:inline-flex;align-items:center;gap:6px;}
+  .pk-hd-tabla td,.pk-hd-tabla th{padding:7px 9px;}
+  .pk-hd-tabla th[data-fecha]{cursor:pointer;text-align:center;}
+  .pk-hd-tabla th[data-fecha]:hover{color:var(--red);}
+  .pk-hd-tabla tbody tr[data-fecha],.pk-hd-tabla tbody tr[data-key]{cursor:pointer;}
+  .pk-hd-tabla tbody tr.on td{background:var(--red-tint)!important;}
+  .pk-hd-tabla tr.vacio td{color:var(--muted);}
+  .pk-hd-tabla th.hoy{color:var(--red);}
+  .pk-hd-tabla td.hoy{background-image:linear-gradient(var(--red-tint),var(--red-tint));}
+  .pk-hd-tabla.sticky td:first-child,.pk-hd-tabla.sticky th:first-child{position:sticky;left:0;z-index:2;background:var(--panel);}
+  .pk-hd-tabla.sticky th:first-child{z-index:3;}
+  .pk-hd-tabla.sticky tbody tr:nth-child(even) td:first-child{background:var(--panel-alt);}
+  .pk-hd-tabla td.sep,.pk-hd-tabla th.sep{border-left:2px solid var(--border);}
+  .pk-ab{display:inline-block;min-width:34px;text-align:center;padding:2px 6px;border-radius:6px;font-size:10.5px;font-weight:800;font-family:var(--mono);}
+  .pk-cel{text-align:center;}
+  .pk-cel-sup{text-align:center;font-family:var(--mono);font-weight:700;}
+  .pk-cel-sup.ok{background:var(--green-dim);color:var(--green);}
+  .pk-cel-sup.parcial{background:var(--amber-dim);color:var(--amber);}
+  .pk-cel-sup.falta{background:var(--red-tint);color:var(--red);}
+  .pk-cel-sup.nada{color:var(--muted);font-weight:500;}
   .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1A1D23;color:#fff;padding:10px 18px;border-radius:10px;
     font-size:12.5px;font-weight:600;box-shadow:var(--shadow);z-index:80;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;text-align:center;}
   .toast.show{opacity:1;}
@@ -1642,8 +1669,13 @@ const SIN_FUNC = "__SIN__";   // valor del chip "sin asignar"
 const FUNC_PALETA = ["#3B82F6","#22C55E","#F5A623","#A78BFA","#22D3EE","#FF3B4E","#EC4899","#84CC16","#14B8A6","#F97316"];
 let funcionesCat = [];        // catálogo completo (activas e inactivas), ordenado
 let funcionesError = null;
-const pk = { fecha: null, filas: [], sup: "", supInit: false, supNoEncontrado: false, q: "", soloSin: false, func: "",
-             sel: new Set(), hist: null, histDias: 14, histT: null };
+const SIN_TURNO = "__SINTURNO__";
+const TURNO_ORDEN = ["MANANA", "TARDE", "NOCHE"];   // claves normalizadas (sin tilde)
+const pk = { fecha: null, filas: [], sup: "", turno: "", supInit: false, supNoEncontrado: false, q: "", soloSin: false, func: "",
+             sel: new Set(), hist: null, histDias: 14, histT: null,
+             agrupar: "sup",        // resumen del dia: por "sup" o por "turno"
+             vistaHist: "dia",      // historial: "dia" | "sup" | "persona"
+             soloConAsig: true };   // detalle por persona: ocultar a quien no tuvo funcion en el periodo
 
 // Una migración sin aplicar se reconoce porque PostgREST no encuentra la función.
 const migracion0013Faltante = (e) => !!e && /PGRST202|Could not find the function|schema cache|42P01|42883/i.test(String(e.code || "") + " " + String(e.message || ""));
@@ -1681,15 +1713,66 @@ function pkSupervisores(){
   });
   return { map, sinSup };
 }
-// Area y Zona del filtro global; el supervisor se aplica aparte para poder comparar contra "todos".
-function pkBase(){
+const tituloTurno = (s) => { const t = String(s || "").trim().toLowerCase(); return t ? t.charAt(0).toUpperCase() + t.slice(1) : ""; };
+function pkTurnos(){
+  const map = new Map(); let sinTurno = 0;
+  pk.filas.forEach(p => {
+    const k = normNombre(p.turno);
+    if(!k){ sinTurno++; return; }
+    const e = map.get(k) || { label: tituloTurno(p.turno), n: 0 };
+    e.n++; map.set(k, e);
+  });
+  return { map, sinTurno };
+}
+const ordenTurno = (k) => { const i = TURNO_ORDEN.indexOf(k); return i < 0 ? 99 : i; };
+const turnoIgual = (turno, sel) => sel === SIN_TURNO ? !normNombre(turno) : normNombre(turno) === sel;
+const supIgual = (sup, sel) => sel === SIN_SUP ? !normNombre(sup) : normNombre(sup) === sel;
+// Area, Zona y Turno de los filtros; el supervisor se aplica aparte (pkPorSupervisor) para poder comparar contra "todos".
+// sinTurno=true lo omite: lo usa el resumen "por turno", que justamente compara los turnos entre si.
+function pkBase(sinTurno){
   const areaSel = normArea(filtros.area);
-  return pk.filas.filter(p => (!areaSel || normArea(p.area) === areaSel) && pasaFiltroZona(p.dni));
+  return pk.filas.filter(p => (!areaSel || normArea(p.area) === areaSel) && pasaFiltroZona(p.dni) && (sinTurno || !pk.turno || turnoIgual(p.turno, pk.turno)));
 }
 function pkPorSupervisor(lista){
-  if(!pk.sup) return lista;
-  if(pk.sup === SIN_SUP) return lista.filter(p => !normNombre(p.supervisor));
-  return lista.filter(p => normNombre(p.supervisor) === pk.sup);
+  return pk.sup ? lista.filter(p => supIgual(p.supervisor, pk.sup)) : lista;
+}
+const pkEtiquetaTurno = () => !pk.turno ? "" : pk.turno === SIN_TURNO ? "Sin turno" : (pkTurnos().map.get(pk.turno)?.label || tituloTurno(pk.turno));
+
+/* ---- Historial: filas {dni, fecha, funcion, nombre, turno, supervisor, area} (los datos son los de ESE dia) ---- */
+// Sin la migracion 0014 el servidor solo manda dni/fecha/funcion: se completan con el censo del dia que se esta viendo.
+function pkNormHist(rows){
+  const ros = new Map(pk.filas.map(p => [p.dni, p]));
+  return (rows || []).map(r => {
+    if(r.nombre !== undefined) return r;
+    const p = ros.get(r.dni);
+    return p ? { ...r, nombre: p.nombre, turno: p.turno, supervisor: p.supervisor, area: p.area } : { ...r, nombre: null, turno: null, supervisor: null, area: null };
+  });
+}
+// El historial del dia que se esta viendo siempre refleja lo que hay en pantalla (incluye lo recien asignado).
+function pkSyncHistDia(){
+  if(!pk.hist) return;
+  pk.hist.rows = pk.hist.rows.filter(r => r.fecha !== pk.fecha);
+  pk.filas.forEach(p => { if(p.funcion) pk.hist.rows.push({ dni: p.dni, fecha: pk.fecha, funcion: p.funcion, nombre: p.nombre, turno: p.turno, supervisor: p.supervisor, area: p.area }); });
+}
+function pasaZonaHist(r){
+  const f = filtros.zona; if(!f) return true;
+  const man = zonasMap[r.dni];
+  const z = (man && man.length) ? man : (zonaDeArea(r.area) ? [zonaDeArea(r.area)] : []);
+  if(f === "PICKING") return z.length > 0;
+  if(f === "NINGUNA") return z.length === 0;
+  return z.includes(f);
+}
+function pkPasaHist(r, sinSup){
+  const areaSel = normArea(filtros.area);
+  return (!areaSel || normArea(r.area) === areaSel) && pasaZonaHist(r)
+    && (!pk.turno || turnoIgual(r.turno, pk.turno)) && (sinSup || !pk.sup || supIgual(r.supervisor, pk.sup));
+}
+const pkFechasHist = () => Array.from({ length: pk.histDias }, (_, i) => addDays(pk.fecha, i - (pk.histDias - 1)));
+// Filas del historial dentro de la ventana elegida y con los filtros activos.
+function pkHistFilas(sinSup){
+  if(!pk.hist) return [];
+  const desde = addDays(pk.fecha, -(pk.histDias - 1));
+  return pk.hist.rows.filter(r => r.fecha >= desde && r.fecha <= pk.fecha && pkPasaHist(r, sinSup));
 }
 function pkFilasTabla(vis){
   const q = pk.q.toLowerCase().trim();
@@ -1726,7 +1809,9 @@ async function renderPicking(){
   }
   pk.filas = filas || [];
   registrarAreas(pk.filas);
-  pk.hist = null;
+  // El historial de otros dias casi no cambia: se reutiliza unos minutos para no volver a bajarlo con cada filtro.
+  if(pk.hist && pk.hist.fecha === pk.fecha && Date.now() - pk.hist.t < 300000) pkSyncHistDia();
+  else pk.hist = null;
   pk.sel.clear();
 
   // Un supervisor entra con su propia gente ya seleccionada (se reconoce su nombre en el censo); el resto ve "todos".
@@ -1739,6 +1824,12 @@ async function renderPicking(){
     }
   }
   if(pk.sup && pk.sup !== SIN_SUP && !sups.map.has(pk.sup)) pk.sup = "";
+  const turnos = pkTurnos();
+  if(pk.turno && pk.turno !== SIN_TURNO && !turnos.map.has(pk.turno)) pk.turno = "";
+  const turnoOpts = `<option value="">Todos los turnos</option>` +
+    [...turnos.map.entries()].sort((a, b) => ordenTurno(a[0]) - ordenTurno(b[0]) || a[1].label.localeCompare(b[1].label, "es"))
+      .map(([k, v]) => `<option value="${escHtml(k)}">${escHtml(v.label)} (${v.n})</option>`).join("") +
+    (turnos.sinTurno ? `<option value="${SIN_TURNO}">(Sin turno) (${turnos.sinTurno})</option>` : "");
 
   const supOpts = `<option value="">Todos los supervisores</option>` +
     [...sups.map.entries()].sort((a, b) => a[1].label.localeCompare(b[1].label, "es"))
@@ -1755,6 +1846,7 @@ async function renderPicking(){
             <button class="btn-sm" id="pk-next" type="button" title="Día siguiente">›</button>
             <button class="btn-sm" id="pk-hoy" type="button">Hoy</button>
           </div></div>
+        <div class="pk-field"><label>Turno</label><select id="pk-turno">${turnoOpts}</select></div>
         <div class="pk-field"><label>Supervisor</label><select id="pk-sup">${supOpts}</select></div>
         <div class="pk-field grow"><label>Buscar</label><input type="text" id="pk-buscar" placeholder="Nombre, DNI, puesto, área o función…" value="${escHtml(pk.q)}"></div>
         <label class="pk-check"><input type="checkbox" id="pk-solo-sin" ${pk.soloSin ? "checked" : ""}>Solo sin asignar</label>
@@ -1787,7 +1879,7 @@ async function renderPicking(){
       <div class="card">
         <div class="card-header-row">
           <div><h3>Evolución de la distribución</h3>
-            <p class="hint" id="pk-hist-hint">Personas por función, día a día (aplica Área, Zona y Supervisor).</p></div>
+            <p class="hint" id="pk-hist-hint">Personas por función, día a día (aplica Área, Zona, Turno y Supervisor).</p></div>
           <select id="pk-hist-dias" class="btn-sm">
             <option value="7">7 días</option><option value="14">14 días</option><option value="30">30 días</option>
           </select>
@@ -1796,18 +1888,44 @@ async function renderPicking(){
         <div class="feed-empty" id="pk-hist-msg" hidden></div>
       </div>
       <div class="card">
-        <h3>Resumen por supervisor</h3>
-        <p class="hint">Quién ya asignó y quién falta. Toca un supervisor para ver solo su gente.</p>
+        <div class="card-header-row">
+          <div><h3 id="pk-res-titulo">Resumen por supervisor</h3>
+            <p class="hint" id="pk-res-hint"></p></div>
+          <div class="pk-seg" id="pk-res-seg"><button type="button" data-g="sup">Supervisor</button><button type="button" data-g="turno">Turno</button></div>
+        </div>
         <div class="table-scroll pk-resumen" id="pk-resumen" style="max-height:360px;"></div>
       </div>
     </div>
+    <div class="card">
+      <div class="card-header-row">
+        <div><h3>Historial por día</h3>
+          <p class="hint" id="pk-hd-hint"></p></div>
+        <div class="pk-hd-tools">
+          <div class="pk-seg" id="pk-hd-seg">
+            <button type="button" data-v="dia">Resumen por día</button>
+            <button type="button" data-v="sup">Por supervisor</button>
+            <button type="button" data-v="persona">Detalle por persona</button>
+          </div>
+          <select id="pk-hd-dias" class="btn-sm">
+            <option value="7">7 días</option><option value="14">14 días</option><option value="30">30 días</option>
+          </select>
+          <button class="btn-sm" id="pk-hd-excel" type="button">⬇ Excel</button>
+        </div>
+      </div>
+      <label class="pk-check" id="pk-hd-solo-wrap" hidden style="padding-bottom:10px;"><input type="checkbox" id="pk-hd-solo" ${pk.soloConAsig ? "checked" : ""}>Solo personas con función en el período</label>
+      <div class="pk-leyenda" id="pk-hd-leyenda" hidden></div>
+      <div class="table-scroll" id="pk-hd" style="max-height:560px;"></div>
+    </div>
   `;
   document.getElementById("pk-sup").value = pk.sup;
+  document.getElementById("pk-turno").value = pk.turno;
   document.getElementById("pk-hist-dias").value = String(pk.histDias);
+  document.getElementById("pk-hd-dias").value = String(pk.histDias);
   destroyChart("pkHist");
   pkEnlazarEventos();
   pintarPicking();
-  cargarHistorialPicking(gen);
+  if(pk.hist){ pintarHistorialPicking(); pintarCopiarPicking(); }
+  else{ pintarHistDias(); cargarHistorialPicking(gen); }
 }
 
 function pkEnlazarEventos(){
@@ -1817,23 +1935,39 @@ function pkEnlazarEventos(){
   el("pk-prev").addEventListener("click", () => ir(addDays(pk.fecha, -1)));
   el("pk-next").addEventListener("click", () => ir(addDays(pk.fecha, 1)));
   el("pk-hoy").addEventListener("click", () => ir(todayISO()));
-  el("pk-sup").addEventListener("change", (e) => { pk.sup = e.target.value; pk.sel.clear(); pintarPicking(); pintarHistorialPicking(); });
+  const refiltrar = () => { el("pk-sup").value = pk.sup; el("pk-turno").value = pk.turno; pk.sel.clear(); pintarPicking(); pintarHistorialPicking(); };
+  el("pk-sup").addEventListener("change", (e) => { pk.sup = e.target.value; refiltrar(); });
+  el("pk-turno").addEventListener("change", (e) => { pk.turno = e.target.value; refiltrar(); });
   el("pk-buscar").addEventListener("input", (e) => { pk.q = e.target.value; pintarPicking(); });
   el("pk-solo-sin").addEventListener("change", (e) => { pk.soloSin = e.target.checked; pintarPicking(); });
   el("pk-exportar").addEventListener("click", exportarPickingExcel);
   el("pk-copiar").addEventListener("click", copiarPickingAnterior);
-  el("pk-hist-dias").addEventListener("change", (e) => { pk.histDias = Number(e.target.value) || 14; pintarHistorialPicking(); });
+  // El rango (7/14/30 días) es uno solo: el gráfico y el historial por día se mueven juntos.
+  const cambiarRango = (e) => { pk.histDias = Number(e.target.value) || 14; el("pk-hist-dias").value = el("pk-hd-dias").value = String(pk.histDias); pintarHistorialPicking(); };
+  el("pk-hist-dias").addEventListener("change", cambiarRango);
+  el("pk-hd-dias").addEventListener("change", cambiarRango);
+  el("pk-hd-seg").addEventListener("click", (e) => { const b = e.target.closest("button[data-v]"); if(!b) return; pk.vistaHist = b.dataset.v; pintarHistDias(); });
+  el("pk-hd-solo").addEventListener("change", (e) => { pk.soloConAsig = e.target.checked; pintarHistDias(); });
+  el("pk-hd-excel").addEventListener("click", exportarHistorialPicking);
+  el("pk-hd").addEventListener("click", (e) => {
+    const th = e.target.closest("th[data-fecha]");
+    const trF = e.target.closest("tr[data-fecha]");
+    const trK = e.target.closest("tr[data-key]");
+    if(th || trF){ ir((th || trF).dataset.fecha); return; }          // tocar un día lo abre para ver/editar
+    if(trK){ pk.sup = pk.sup === trK.dataset.key ? "" : trK.dataset.key; refiltrar(); }   // tocar un supervisor lo filtra
+  });
 
   el("pk-dist").addEventListener("click", (e) => {
     const chip = e.target.closest(".pk-chip"); if(!chip) return;
     pk.func = pk.func === chip.dataset.func ? "" : chip.dataset.func;
     pintarPicking();
   });
+  el("pk-res-seg").addEventListener("click", (e) => { const b = e.target.closest("button[data-g]"); if(!b) return; pk.agrupar = b.dataset.g; pintarPicking(); });
   el("pk-resumen").addEventListener("click", (e) => {
-    const tr = e.target.closest("tr[data-sup]"); if(!tr) return;
-    pk.sup = pk.sup === tr.dataset.sup ? "" : tr.dataset.sup;
-    el("pk-sup").value = pk.sup; pk.sel.clear();
-    pintarPicking(); pintarHistorialPicking();
+    const tr = e.target.closest("tr[data-key]"); if(!tr) return;
+    if(pk.agrupar === "turno") pk.turno = pk.turno === tr.dataset.key ? "" : tr.dataset.key;
+    else pk.sup = pk.sup === tr.dataset.key ? "" : tr.dataset.key;
+    refiltrar();
   });
   el("pk-tabla").addEventListener("change", (e) => {
     const t = e.target;
@@ -1864,7 +1998,7 @@ function pintarPicking(){
   [...pk.sel].forEach(d => { if(!visDni.has(d)) pk.sel.delete(d); });   // no actuar sobre filas que ya no se ven
 
   const hoy = todayISO();
-  document.getElementById("f-hint").textContent = "Función diaria · " + fmtFecha(pk.fecha) + ((filtros.area || filtros.zona) ? " · " + etiquetaFiltro("") : "");
+  document.getElementById("f-hint").textContent = "Función diaria · " + fmtFecha(pk.fecha) + ((filtros.area || filtros.zona) ? " · " + etiquetaFiltro("") : "") + (pk.turno ? " · Turno " + pkEtiquetaTurno() : "");
 
   // Nota contextual (por qué no se puede editar, o cómo encontrar a su gente).
   const nota = document.getElementById("pk-nota");
@@ -1883,7 +2017,7 @@ function pintarPicking(){
   const presSin = vis.filter(p => p.ingreso && !p.funcion).length;
   const pct = vis.length ? Math.round(conF / vis.length * 100) : 0;
   document.getElementById("pk-kpis").innerHTML =
-    kpiTile("Colaboradores", vis.length, pk.sup ? "de este supervisor" : etiquetaFiltro("activos"), "#3B82F6", "👥") +
+    kpiTile("Colaboradores", vis.length, [pk.turno ? "turno " + pkEtiquetaTurno().toLowerCase() : "", pk.sup ? "de este supervisor" : (filtros.area || filtros.zona) ? etiquetaFiltro("") : ""].filter(Boolean).join(" · ") || "activos", "#3B82F6", "👥") +
     kpiTile("Con función", conF, pct + "% asignado", "#22C55E", "✅") +
     kpiTile("Sin asignar", sin, "falta definir su función", sin ? "#F5A623" : "#22C55E", "⏳") +
     kpiTile("Presentes sin función", presSin, "ya marcaron ingreso", presSin ? "#FF3B4E" : "#22C55E", "⚠️");
@@ -1897,7 +2031,7 @@ function pintarPicking(){
   items.push({ key: SIN_FUNC, label: "Sin asignar", n: sin, color: "#9CA3AF" });
   const total = vis.length;
   document.getElementById("pk-dist").innerHTML = !total
-    ? `<div class="feed-empty">${(filtros.area || filtros.zona || pk.sup) ? "Nadie cumple el filtro actual." : "No hay colaboradores activos en esta fecha."}</div>`
+    ? `<div class="feed-empty">${(filtros.area || filtros.zona || pk.sup || pk.turno) ? "Nadie cumple el filtro actual." : "No hay colaboradores activos en esta fecha."}</div>`
     : `<div class="pk-dist-bar">${items.filter(i => i.n).map(i => `<span style="width:${i.n / total * 100}%;background:${i.color};" title="${escHtml(i.label)}: ${i.n}"></span>`).join("")}</div>
        <div class="pk-chips">${items.map(i => `<button type="button" class="pk-chip${pk.func === i.key ? " on" : ""}" data-func="${escHtml(i.key)}" style="--c:${i.color};">
          <i></i>${escHtml(i.label)} <b>${i.n}</b> <small>${Math.round(i.n / total * 100)}%</small></button>`).join("")}</div>`;
@@ -1935,21 +2069,33 @@ function pintarPicking(){
   cont.scrollTop = scroll;
   pintarPickingBulk(); pintarPickingEncabezado();
 
-  // Resumen por supervisor (respeta Área y Zona, pero no el selector de supervisor: es el tablero para compararlos)
+  // Resumen del día por supervisor o por turno. Es el tablero para comparar, así que no aplica el filtro de lo
+  // que compara: por supervisor ignora el supervisor elegido; por turno ignora el turno elegido.
+  const porTurno = pk.agrupar === "turno";
+  document.querySelectorAll("#pk-res-seg button").forEach(b => b.classList.toggle("on", b.dataset.g === pk.agrupar));
+  document.getElementById("pk-res-titulo").textContent = porTurno ? "Resumen por turno" : "Resumen por supervisor";
+  document.getElementById("pk-res-hint").textContent = porTurno
+    ? "Cómo se reparte cada turno el " + fmtFecha(pk.fecha) + ". Toca un turno para ver solo ese."
+    : "Quién ya asignó y quién falta. Toca un supervisor para ver solo su gente.";
+  const origen = porTurno ? pkPorSupervisor(pkBase(true)) : base;
   const grupos = new Map();
-  base.forEach(p => {
-    const k = normNombre(p.supervisor) || SIN_SUP;
-    const g = grupos.get(k) || { label: k === SIN_SUP ? "(Sin supervisor)" : String(p.supervisor).trim(), total: 0, sin: 0, por: {} };
+  origen.forEach(p => {
+    const k = porTurno ? (normNombre(p.turno) || SIN_TURNO) : (normNombre(p.supervisor) || SIN_SUP);
+    const etiqueta = porTurno ? (k === SIN_TURNO ? "(Sin turno)" : tituloTurno(p.turno)) : (k === SIN_SUP ? "(Sin supervisor)" : String(p.supervisor).trim());
+    const g = grupos.get(k) || { label: etiqueta, total: 0, sin: 0, por: {} };
     g.total++; if(p.funcion){ g.por[p.funcion] = (g.por[p.funcion] || 0) + 1; } else g.sin++;
     grupos.set(k, g);
   });
   const usadas = new Set(); grupos.forEach(g => Object.keys(g.por).forEach(f => usadas.add(f)));
   const cols = funcionesCat.filter(f => f.activo || usadas.has(f.nombre));
-  const ordenados = [...grupos.entries()].sort((a, b) => b[1].sin - a[1].sin || a[1].label.localeCompare(b[1].label, "es"));
+  const ordenados = [...grupos.entries()].sort(porTurno
+    ? (a, b) => ordenTurno(a[0]) - ordenTurno(b[0]) || a[1].label.localeCompare(b[1].label, "es")
+    : (a, b) => b[1].sin - a[1].sin || a[1].label.localeCompare(b[1].label, "es"));
+  const seleccionado = porTurno ? pk.turno : pk.sup;
   document.getElementById("pk-resumen").innerHTML = !ordenados.length ? `<div class="feed-empty">Sin datos.</div>` :
-    `<table><thead><tr><th>Supervisor</th>${cols.map(f => `<th class="num" style="color:${colorFunc(f.nombre)};">${escHtml(f.nombre)}</th>`).join("")}
+    `<table><thead><tr><th>${porTurno ? "Turno" : "Supervisor"}</th>${cols.map(f => `<th class="num" style="color:${colorFunc(f.nombre)};">${escHtml(f.nombre)}</th>`).join("")}
       <th class="num">Sin asignar</th><th class="num">Total</th><th class="num">% asignado</th></tr></thead>
-     <tbody>${ordenados.map(([k, g]) => `<tr data-sup="${escHtml(k)}" class="${pk.sup === k ? "on" : ""}">
+     <tbody>${ordenados.map(([k, g]) => `<tr data-key="${escHtml(k)}" class="${seleccionado === k ? "on" : ""}">
         <td style="font-weight:700;">${escHtml(g.label)}</td>
         ${cols.map(f => `<td class="num">${g.por[f.nombre] || `<span class="hora-pendiente">·</span>`}</td>`).join("")}
         <td class="num" style="${g.sin ? "color:var(--amber);font-weight:800;" : ""}">${g.sin}</td>
@@ -1981,18 +2127,15 @@ async function pkAsignar(dnis, funcion){
   aplicar(p => { p.funcion = funcion || null; p.asignado_por = funcion ? session.nombre : null; p.asignado_en = funcion ? new Date().toISOString() : null; });
   dnis.forEach(d => pk.sel.delete(d));   // lo ya asignado sale de la selección; el resto se mantiene
   pintarPicking();
+  const refrescarHist = () => { if(pk.fecha !== fecha) return; pkSyncHistDia(); clearTimeout(pk.histT); pk.histT = setTimeout(pintarHistorialPicking, 150); };
+  refrescarHist();
   try{
     await rpc("asis_picking_asignar", { p_fecha: fecha, p_dnis: dnis, p_funcion: funcion || null });
-    if(pk.hist && pk.fecha === fecha){
-      const s = new Set(dnis);
-      pk.hist.rows = pk.hist.rows.filter(r => !(r.fecha === fecha && s.has(r.dni)));
-      if(funcion) dnis.forEach(d => pk.hist.rows.push({ dni: d, fecha, funcion }));
-      clearTimeout(pk.histT); pk.histT = setTimeout(pintarHistorialPicking, 150);
-    }
     toast(funcion ? (dnis.length > 1 ? `${dnis.length} colaboradores → ${funcion}` : `Guardado: ${funcion}`) : (dnis.length > 1 ? `Se quitó la función a ${dnis.length}` : "Función quitada"));
   }catch(e){
     aplicar(p => { Object.assign(p, previo.get(p.dni)); });
     pintarPicking();
+    refrescarHist();
     toast("No se pudo guardar: " + humanError(e), true);
   }
 }
@@ -2003,28 +2146,33 @@ async function cargarHistorialPicking(gen){
   try{
     const rows = await rpc("asis_picking_rango", { p_desde: desde, p_hasta: hasta });
     if(gen !== renderGen) return;
-    pk.hist = { rows: rows || [] };
+    pk.hist = { fecha: hasta, t: Date.now(), rows: pkNormHist(rows) };
+    pkSyncHistDia();
   }catch(e){
     if(gen !== renderGen) return;
     console.warn("asis_picking_rango:", e && e.message ? e.message : e);
     const msg = document.getElementById("pk-hist-msg");
     if(msg){ msg.hidden = false; msg.textContent = "No se pudo cargar el historial."; document.getElementById("pk-hist-box").hidden = true; }
+    const hd = document.getElementById("pk-hd");
+    if(hd) hd.innerHTML = `<div class="feed-empty">No se pudo cargar el historial.</div>`;
     return;
   }
   pintarHistorialPicking();
   pintarCopiarPicking();
 }
 function pintarHistorialPicking(){
+  if(tabActivo !== "picking") return;
+  pintarGraficoHist();
+  pintarHistDias();
+}
+function pintarGraficoHist(){
   const box = document.getElementById("pk-hist-box"), msg = document.getElementById("pk-hist-msg");
-  if(!box || tabActivo !== "picking") return;
+  if(!box) return;
   if(!pk.hist){ box.hidden = true; msg.hidden = false; msg.textContent = "Cargando historial…"; return; }
-  const dias = pk.histDias;
-  const fechas = Array.from({ length: dias }, (_, i) => addDays(pk.fecha, i - (dias - 1)));
-  const filtrando = pk.sup || filtros.area || filtros.zona;
-  const dniSet = filtrando ? new Set(pkPorSupervisor(pkBase()).map(p => p.dni)) : null;
+  const fechas = pkFechasHist();
+  const filtrando = pk.sup || pk.turno || filtros.area || filtros.zona;
   const cuenta = {}; let total = 0;
-  pk.hist.rows.forEach(r => {
-    if(r.fecha < fechas[0] || r.fecha > pk.fecha || (dniSet && !dniSet.has(r.dni))) return;
+  pkHistFilas().forEach(r => {
     if(!cuenta[r.funcion]) cuenta[r.funcion] = {};
     cuenta[r.funcion][r.fecha] = (cuenta[r.funcion][r.fecha] || 0) + 1; total++;
   });
@@ -2046,6 +2194,185 @@ function pintarHistorialPicking(){
                  datalabels: { color: "#fff", anchor: "center", align: "center", font: { size: 10, weight: "700" } } },
       scales: { x: { stacked: true, grid: { display: false }, ticks }, y: { stacked: true, beginAtZero: true, grid, ticks } } }
   });
+}
+
+/* ---------- Historial por día: datos (los usa la pantalla y el Excel) ---------- */
+const fmtDiaLargo = (f) => new Date(f + "T00:00:00").toLocaleDateString("es-PE", { weekday: "short", day: "2-digit", month: "short" });
+const fmtDiaCorto = (f) => new Date(f + "T00:00:00").toLocaleDateString("es-PE", { weekday: "narrow", day: "2-digit" });
+// Funciones que aparecen como columnas: las activas del catálogo + las que se usaron en el período aunque ya estén inactivas.
+function pkColumnasFunc(filas){
+  const usadas = new Set(filas.map(r => r.funcion));
+  return [...funcionesCat.filter(f => f.activo || usadas.has(f.nombre)).map(f => f.nombre),
+          ...[...usadas].filter(n => !funcionesCat.some(f => f.nombre === n))];
+}
+// Abreviatura única de 3+ letras por función (PIC / EMB / TRO...); crece solo si dos empiezan igual.
+function pkAbreviaturas(nombres){
+  const limpio = (n) => normNombre(n).replace(/[^A-Z0-9]/g, "");
+  const res = {};
+  nombres.forEach(n => {
+    const a = limpio(n); let L = 3;
+    while(L < a.length && nombres.some(o => o !== n && limpio(o).slice(0, L) === a.slice(0, L))) L++;
+    res[n] = a.slice(0, L) || "?";
+  });
+  return res;
+}
+const pkClaveTurnoFila = (r) => normNombre(r.turno) || SIN_TURNO;
+const pkEtiquetaTurnoFila = (k, filas) => k === SIN_TURNO ? "Sin turno" : tituloTurno((filas.find(r => pkClaveTurnoFila(r) === k) || {}).turno);
+
+// Resumen por día: cuántas personas tuvo cada función cada día, y cuántas por turno.
+function pkDatosPorDia(){
+  const filas = pkHistFilas();
+  const funcs = pkColumnasFunc(filas);
+  const turnoKeys = [...new Set(filas.map(pkClaveTurnoFila))].sort((a, b) => (a === SIN_TURNO) - (b === SIN_TURNO) || ordenTurno(a) - ordenTurno(b) || a.localeCompare(b));
+  const porFecha = {};
+  filas.forEach(r => {
+    const d = porFecha[r.fecha] || (porFecha[r.fecha] = { total: 0, por: {}, turnos: {} });
+    d.total++; d.por[r.funcion] = (d.por[r.funcion] || 0) + 1;
+    const t = pkClaveTurnoFila(r); d.turnos[t] = (d.turnos[t] || 0) + 1;
+  });
+  return { filas, funcs, turnoKeys, turnoLabel: (k) => pkEtiquetaTurnoFila(k, filas), fechas: pkFechasHist(), porFecha };
+}
+// Por supervisor: cuántas personas con función tuvo cada supervisor cada día frente al tamaño de su equipo actual.
+// Ignora el filtro de supervisor (es el tablero para compararlos); respeta Área, Zona y Turno.
+function pkDatosPorSup(){
+  const filas = pkHistFilas(true);
+  const fechas = pkFechasHist();
+  const grupos = new Map();
+  const grupo = (k, label) => grupos.get(k) || (grupos.set(k, { key: k, label, equipo: 0, por: {} }), grupos.get(k));
+  filas.forEach(r => {
+    const k = normNombre(r.supervisor) || SIN_SUP;
+    const g = grupo(k, k === SIN_SUP ? "(Sin supervisor)" : String(r.supervisor).trim());
+    g.por[r.fecha] = (g.por[r.fecha] || 0) + 1;
+  });
+  pkBase().forEach(p => {   // tamaño del equipo hoy (con Área/Zona/Turno aplicados)
+    const k = normNombre(p.supervisor) || SIN_SUP;
+    grupo(k, k === SIN_SUP ? "(Sin supervisor)" : String(p.supervisor).trim()).equipo++;
+  });
+  const activo = {};   // un día "tuvo actividad" si alguien asignó algo: así un domingo no cuenta como falta
+  filas.forEach(r => { activo[r.fecha] = true; });
+  const lista = [...grupos.values()].sort((a, b) => (a.key === SIN_SUP) - (b.key === SIN_SUP) || a.label.localeCompare(b.label, "es"));
+  lista.forEach(g => { g.dias = fechas.filter(f => g.por[f]).length; });
+  return { fechas, lista, activo };
+}
+// Detalle por persona: la función de cada colaborador en cada día.
+function pkDatosPorPersona(){
+  const filas = pkHistFilas();
+  const fechas = pkFechasHist();
+  const personas = new Map();
+  filas.forEach(r => {
+    const p = personas.get(r.dni) || { dni: r.dni, nombre: r.nombre || r.dni, turno: r.turno, supervisor: r.supervisor, area: r.area, ult: "", dias: {} };
+    p.dias[r.fecha] = r.funcion;
+    if(r.fecha >= p.ult){ p.ult = r.fecha; p.nombre = r.nombre || p.nombre; p.turno = r.turno; p.supervisor = r.supervisor; p.area = r.area; }   // datos del día más reciente
+    personas.set(r.dni, p);
+  });
+  if(!pk.soloConAsig){   // incluir también a quien no tuvo función en el período (para ver los huecos)
+    pkPorSupervisor(pkBase()).forEach(p => { if(!personas.has(p.dni)) personas.set(p.dni, { dni: p.dni, nombre: p.nombre, turno: p.turno, supervisor: p.supervisor, area: p.area, ult: "", dias: {} }); });
+  }
+  const lista = [...personas.values()].sort((a, b) =>
+    (normNombre(a.supervisor) || "~").localeCompare(normNombre(b.supervisor) || "~", "es") || String(a.nombre).localeCompare(String(b.nombre), "es"));
+  lista.forEach(p => { p.nDias = fechas.filter(f => p.dias[f]).length; });
+  return { fechas, lista };
+}
+
+function pintarHistDias(){
+  const cont = document.getElementById("pk-hd");
+  if(!cont || tabActivo !== "picking") return;
+  document.querySelectorAll("#pk-hd-seg button").forEach(b => b.classList.toggle("on", b.dataset.v === pk.vistaHist));
+  document.getElementById("pk-hd-solo-wrap").hidden = pk.vistaHist !== "persona";
+  const ley = document.getElementById("pk-hd-leyenda"); ley.hidden = true;
+  const HINTS = {
+    dia: "Cuántas personas tuvo cada función por día y por turno. Toca un día para abrirlo.",
+    sup: "Personas con función asignada por supervisor y día, frente al tamaño de su equipo. Verde: casi todo el equipo · ámbar: parcial · rojo: no asignó en un día con actividad.",
+    persona: "Qué función tuvo cada persona cada día, con el supervisor y turno que tenía ese día. Toca un día para abrirlo.",
+  };
+  document.getElementById("pk-hd-hint").textContent = HINTS[pk.vistaHist];
+  if(!pk.hist){ cont.innerHTML = `<div class="feed-empty">Cargando historial…</div>`; return; }
+  const hoyCol = (f) => f === pk.fecha ? "hoy" : "";
+
+  if(pk.vistaHist === "dia"){
+    const d = pkDatosPorDia();
+    if(!d.filas.length){ cont.innerHTML = `<div class="feed-empty">Todavía no hay funciones asignadas en estos días${(pk.sup || pk.turno || filtros.area || filtros.zona) ? " para el filtro actual" : ""}.</div>`; return; }
+    cont.innerHTML = `<table class="pk-hd-tabla"><thead><tr><th>Día</th>
+      ${d.funcs.map(n => `<th class="num" style="color:${colorFunc(n)};">${escHtml(n)}</th>`).join("")}
+      <th class="num">Total</th>
+      ${d.turnoKeys.map((k, i) => `<th class="num${i === 0 ? " sep" : ""}">${escHtml(d.turnoLabel(k))}</th>`).join("")}</tr></thead>
+      <tbody>${[...d.fechas].reverse().map(f => { const x = d.porFecha[f];
+        return `<tr data-fecha="${f}" class="${f === pk.fecha ? "on " : ""}${x ? "" : "vacio"}">
+          <td style="font-weight:700;">${escHtml(fmtDiaLargo(f))}</td>
+          ${d.funcs.map(n => `<td class="num">${x && x.por[n] ? x.por[n] : `<span class="hora-pendiente">·</span>`}</td>`).join("")}
+          <td class="num" style="font-weight:800;">${x ? x.total : `<span class="hora-pendiente">—</span>`}</td>
+          ${d.turnoKeys.map((k, i) => `<td class="num${i === 0 ? " sep" : ""}">${x && x.turnos[k] ? x.turnos[k] : `<span class="hora-pendiente">·</span>`}</td>`).join("")}
+        </tr>`; }).join("")}</tbody></table>`;
+    return;
+  }
+
+  if(pk.vistaHist === "sup"){
+    const d = pkDatosPorSup();
+    if(!d.lista.length){ cont.innerHTML = `<div class="feed-empty">Sin datos para el filtro actual.</div>`; return; }
+    cont.innerHTML = `<table class="pk-hd-tabla sticky"><thead><tr><th>Supervisor</th><th class="num">Equipo</th>
+      ${d.fechas.map(f => `<th data-fecha="${f}" class="${hoyCol(f)}" title="${escHtml(fmtDiaLargo(f))}">${escHtml(fmtDiaCorto(f))}</th>`).join("")}
+      <th class="num sep">Días con función</th></tr></thead>
+      <tbody>${d.lista.map(g => `<tr data-key="${escHtml(g.key)}" class="${pk.sup === g.key ? "on" : ""}">
+        <td style="font-weight:700;">${escHtml(g.label)}</td><td class="num">${g.equipo}</td>
+        ${d.fechas.map(f => {
+          const n = g.por[f] || 0;
+          const cls = n ? ((g.equipo ? n / g.equipo : 1) >= 0.9 ? "ok" : "parcial") : (d.activo[f] ? "falta" : "nada");
+          return `<td class="pk-cel-sup ${cls} ${hoyCol(f)}" title="${escHtml(g.label)} · ${escHtml(fmtDiaLargo(f))}: ${n} de ${g.equipo}">${n || (d.activo[f] ? "0" : "·")}</td>`; }).join("")}
+        <td class="num sep">${g.dias} / ${d.fechas.filter(f => d.activo[f]).length}</td></tr>`).join("")}</tbody></table>`;
+    return;
+  }
+
+  const d = pkDatosPorPersona();
+  const nombres = pkColumnasFunc(pkHistFilas());
+  const abrev = pkAbreviaturas(nombres);
+  ley.hidden = !nombres.length;
+  ley.innerHTML = nombres.map(n => `<span><b class="pk-ab" style="background:${colorFunc(n)}22;color:${colorFunc(n)};">${escHtml(abrev[n])}</b>${escHtml(n)}</span>`).join("");
+  if(!d.lista.length){ cont.innerHTML = `<div class="feed-empty">Nadie tuvo función asignada en estos días${(pk.sup || pk.turno || filtros.area || filtros.zona) ? " con el filtro actual" : ""}.</div>`; return; }
+  cont.innerHTML = `<table class="pk-hd-tabla sticky"><thead><tr><th>Colaborador</th><th>Turno</th><th>Supervisor</th>
+    ${d.fechas.map(f => `<th data-fecha="${f}" class="${hoyCol(f)}" title="${escHtml(fmtDiaLargo(f))}">${escHtml(fmtDiaCorto(f))}</th>`).join("")}
+    <th class="num sep">Días</th></tr></thead>
+    <tbody>${d.lista.map(p => `<tr>
+      <td><div class="pk-nombre">${avatarHtml(p.nombre)}<span>${escHtml(p.nombre)}<small>${escHtml(p.dni)}</small></span></div></td>
+      <td class="meta">${escHtml(tituloTurno(p.turno)) || "—"}</td>
+      <td class="meta">${escHtml(p.supervisor) || "—"}</td>
+      ${d.fechas.map(f => { const fn = p.dias[f];
+        return `<td class="pk-cel ${hoyCol(f)}">${fn ? `<span class="pk-ab" style="background:${colorFunc(fn)}22;color:${colorFunc(fn)};" title="${escHtml(fmtDiaLargo(f))} · ${escHtml(fn)}">${escHtml(abrev[fn] || "?")}</span>` : `<span class="hora-pendiente">·</span>`}</td>`; }).join("")}
+      <td class="num sep">${p.nDias}</td></tr>`).join("")}</tbody></table>`;
+}
+
+function exportarHistorialPicking(){
+  if(!pk.hist){ toast("El historial todavía se está cargando.", true); return; }
+  const dia = pkDatosPorDia();
+  if(!dia.filas.length){ toast("No hay asignaciones para exportar con el filtro actual.", true); return; }
+  const sup = pkDatosPorSup(), per = pkDatosPorPersona();
+  const filtrosTxt = [filtros.area, filtros.zona && (filtros.zona === "PICKING" ? "Picking" : filtros.zona === "NINGUNA" ? "Sin zona" : zonaDef(filtros.zona).label),
+    pk.turno && "Turno " + pkEtiquetaTurno()].filter(Boolean).join(" · ") || "sin filtros";
+  const wb = XLSX.utils.book_new();
+  // 1) Resumen por día
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([...dia.fechas].reverse().map(f => {
+    const x = dia.porFecha[f] || { total: 0, por: {}, turnos: {} };
+    const fila = { Fecha: f, Día: fmtDiaLargo(f) };
+    dia.funcs.forEach(n => { fila[n] = x.por[n] || 0; });
+    fila.Total = x.total;
+    dia.turnoKeys.forEach(k => { fila["Turno " + dia.turnoLabel(k)] = x.turnos[k] || 0; });
+    return fila;
+  })), "Resumen por día");
+  // 2) Por supervisor
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sup.lista.map(g => {
+    const fila = { Supervisor: g.label, "Equipo hoy": g.equipo };
+    sup.fechas.forEach(f => { fila[f] = g.por[f] || 0; });
+    fila["Días con función"] = g.dias;
+    return fila;
+  })), "Por supervisor");
+  // 3) Detalle por persona (la función de cada día)
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(per.lista.map(p => {
+    const fila = { DNI: p.dni, Colaborador: p.nombre, Turno: tituloTurno(p.turno), Supervisor: p.supervisor || "", Área: p.area || "" };
+    per.fechas.forEach(f => { fila[f] = p.dias[f] || ""; });
+    fila["Días con función"] = p.nDias;
+    return fila;
+  })), "Detalle por persona");
+  XLSX.writeFile(wb, `picking_historial_${pkFechasHist()[0]}_a_${pk.fecha}.xlsx`);
+  toast("Excel generado (" + filtrosTxt + ")");
 }
 
 // "Copiar día anterior": toma el último día previo que tenga asignaciones (así sirve también tras un domingo o feriado)
@@ -2079,7 +2406,8 @@ async function copiarPickingAnterior(){
     const gen = renderGen;
     const [filas, rows] = await Promise.all([rpc("asis_picking_dia", { p_fecha: fecha }), rpc("asis_picking_rango", { p_desde: addDays(fecha, -29), p_hasta: fecha })]);
     if(gen !== renderGen || pk.fecha !== fecha) return;
-    pk.filas = filas || []; registrarAreas(pk.filas); pk.hist = { rows: rows || [] };
+    pk.filas = filas || []; registrarAreas(pk.filas); pk.hist = { fecha, t: Date.now(), rows: pkNormHist(rows) };
+    pkSyncHistDia();
     pintarPicking(); pintarHistorialPicking();
   }catch(e){
     toast("No se pudo copiar: " + humanError(e), true);
