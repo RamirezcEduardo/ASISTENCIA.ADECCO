@@ -425,7 +425,8 @@ const SUPABASE_URL = "https://zlukrktpjffiycarpduc.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_QFLNZihxZRqdvyc-GSRZPw_Q-rkA6No";
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const SESSION_KEY = "asis-control-token";
-const ROLE_LABELS = { admin:"Administrador", gerencia:"Gerencia", coordinador:"Coordinador", rrhh:"Gestión Humana", supervisor:"Supervisor" };
+const ROLE_LABELS = { admin:"Administrador", gerencia:"Gerencia", coordinador:"Coordinador", rrhh:"Gestión Humana", supervisor:"Supervisor",
+  operador:"Operador", supervisor_ssoma:"Supervisor SSOMA", invitado:"Invitado" };
 
 /* Mismos codigos/colores que el modulo Asistencia y Rotacion de Adecco
    KPI (asistencia.js) -- no reinventar la clasificacion de negocio. */
@@ -515,7 +516,10 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
   btn.disabled = false; btn.textContent = "Ingresar";
   if(error || !data){ errorEl.textContent = "Usuario o contraseña incorrectos."; errorEl.classList.add("show"); return; }
   if(!(data.permisos || []).includes("view.asistencia")){
-    errorEl.textContent = "Tu cuenta no tiene acceso al Centro de Control."; errorEl.classList.add("show"); return;
+    // Se dice el rol de la cuenta para que quien administra vea al instante por qué (p. ej. un supervisor creado como "operador").
+    const rol = data.usuario?.rol;
+    errorEl.textContent = `Tu cuenta${rol ? " (rol " + (ROLE_LABELS[rol] || rol) + ")" : ""} no tiene acceso al Centro de Control. Pide a un administrador que la pase a rol Supervisor.`;
+    errorEl.classList.add("show"); return;
   }
   session = aplanarSesion(data.token, data);
   try{ localStorage.setItem(SESSION_KEY, data.token); }catch(e){}
