@@ -246,8 +246,17 @@
   .pk-check input{accent-color:var(--red);}
   .pk-nota{margin:12px 0 0;font-size:12px;color:var(--muted);line-height:1.5;}
   .pk-nota.warn{color:var(--amber);}
-  .pk-dist-bar{display:flex;height:12px;border-radius:999px;overflow:hidden;background:var(--panel-alt);border:1px solid var(--border-soft);margin:8px 0 14px;}
-  .pk-dist-bar span{display:block;height:100%;}
+  .pk-grid-top{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:16px;align-items:start;}
+  @media (max-width:1100px){.pk-grid-top{grid-template-columns:minmax(0,1fr);}}
+  .pk-dist-wrap{display:flex;flex-wrap:wrap;align-items:center;gap:18px 22px;margin-top:8px;}
+  .pk-dona-box{position:relative;width:210px;height:210px;flex-shrink:0;margin:0 auto;}
+  .pk-chips-col{flex:1;min-width:210px;flex-direction:column;flex-wrap:nowrap;gap:6px;}
+  .pk-chips-col .pk-chip{width:100%;border-radius:10px;padding:7px 12px;}
+  .pk-chips-col .pk-chip small{margin-left:auto;}
+  .pk-sup-box{position:relative;width:100%;margin-top:6px;}
+  .pk-detalle{margin-top:12px;border-top:1px solid var(--border-soft);padding-top:10px;}
+  .pk-detalle summary{cursor:pointer;font-size:12px;font-weight:700;color:var(--text-soft);}
+  .pk-detalle summary:hover{color:var(--text);}
   .pk-chips{display:flex;flex-wrap:wrap;gap:8px;}
   .pk-chip{display:inline-flex;align-items:center;gap:8px;background:var(--panel-alt);border:1px solid var(--border);border-radius:999px;
     padding:6px 13px;font-size:12.5px;color:var(--text);cursor:pointer;}
@@ -1968,10 +1977,27 @@ async function renderPicking(){
       <p class="pk-nota" id="pk-alcance" style="margin-top:4px;"></p>
     </div>
     <div class="kpi-grid" id="pk-kpis"></div>
-    <div class="card">
-      <h3>Distribución del día</h3>
-      <p class="hint">Toca una función para filtrar la lista; vuelve a tocarla para quitar el filtro.</p>
-      <div id="pk-dist"></div>
+    <div class="pk-grid-top">
+      <div class="card">
+        <h3>Distribución del día</h3>
+        <p class="hint">Toca una función (en el gráfico o en la lista) para filtrar la tabla; vuelve a tocarla para quitar el filtro.</p>
+        <div class="pk-dist-wrap">
+          <div class="pk-dona-box" id="pk-dona-box"><canvas id="ch-pk-dona"></canvas></div>
+          <div id="pk-dist" class="pk-chips pk-chips-col"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header-row">
+          <div><h3 id="pk-res-titulo">Resumen por supervisor</h3>
+            <p class="hint" id="pk-res-hint"></p></div>
+          <div class="pk-seg" id="pk-res-seg"><button type="button" data-g="sup">Supervisor</button><button type="button" data-g="turno">Turno</button></div>
+        </div>
+        <div class="pk-sup-box" id="pk-sup-box"><canvas id="ch-pk-sup"></canvas></div>
+        <details class="pk-detalle">
+          <summary>Ver tabla con cifras</summary>
+          <div class="table-scroll pk-resumen" id="pk-resumen" style="max-height:340px;margin-top:10px;"></div>
+        </details>
+      </div>
     </div>
     <div class="card">
       <div class="card-header-row">
@@ -1987,26 +2013,16 @@ async function renderPicking(){
       </div>
       <div class="table-scroll" id="pk-tabla" style="max-height:560px;"></div>
     </div>
-    <div class="grid-2">
-      <div class="card">
-        <div class="card-header-row">
-          <div><h3>Evolución de la distribución</h3>
-            <p class="hint" id="pk-hist-hint">Personas por función, día a día (aplica Área, Zona, Turno y Supervisor).</p></div>
-          <select id="pk-hist-dias" class="btn-sm">
-            <option value="7">7 días</option><option value="14">14 días</option><option value="30">30 días</option>
-          </select>
-        </div>
-        <div class="chart-box tall" id="pk-hist-box"><canvas id="ch-pk-hist"></canvas></div>
-        <div class="feed-empty" id="pk-hist-msg" hidden></div>
+    <div class="card">
+      <div class="card-header-row">
+        <div><h3>Evolución de la distribución</h3>
+          <p class="hint" id="pk-hist-hint">Personas por función, día a día (aplica Área, Zona, Turno y Supervisor).</p></div>
+        <select id="pk-hist-dias" class="btn-sm">
+          <option value="7">7 días</option><option value="14">14 días</option><option value="30">30 días</option>
+        </select>
       </div>
-      <div class="card">
-        <div class="card-header-row">
-          <div><h3 id="pk-res-titulo">Resumen por supervisor</h3>
-            <p class="hint" id="pk-res-hint"></p></div>
-          <div class="pk-seg" id="pk-res-seg"><button type="button" data-g="sup">Supervisor</button><button type="button" data-g="turno">Turno</button></div>
-        </div>
-        <div class="table-scroll pk-resumen" id="pk-resumen" style="max-height:360px;"></div>
-      </div>
+      <div class="chart-box tall" id="pk-hist-box"><canvas id="ch-pk-hist"></canvas></div>
+      <div class="feed-empty" id="pk-hist-msg" hidden></div>
     </div>
     <div class="card">
       <div class="card-header-row">
@@ -2033,7 +2049,7 @@ async function renderPicking(){
   document.getElementById("pk-turno").value = pk.turno;
   document.getElementById("pk-hist-dias").value = String(pk.histDias);
   document.getElementById("pk-hd-dias").value = String(pk.histDias);
-  destroyChart("pkHist");
+  destroyChart("pkHist"); destroyChart("pkDona"); destroyChart("pkSup");
   pkEnlazarEventos();
   pintarPicking();
   if(pk.hist){ pintarHistorialPicking(); pintarCopiarPicking(); }
@@ -2153,9 +2169,9 @@ function pintarPicking(){
   const total = vis.length;
   document.getElementById("pk-dist").innerHTML = !total
     ? `<div class="feed-empty">${(filtros.area || filtros.zona || pk.sup || pk.turno) ? "Nadie cumple el filtro actual." : "No hay colaboradores de picking en esta fecha."}${fuera ? " Marca «Incluir otras áreas» para ver al resto del personal." : ""}</div>`
-    : `<div class="pk-dist-bar">${items.filter(i => i.n).map(i => `<span style="width:${i.n / total * 100}%;background:${i.color};" title="${escHtml(i.label)}: ${i.n}"></span>`).join("")}</div>
-       <div class="pk-chips">${items.map(i => `<button type="button" class="pk-chip${pk.func === i.key ? " on" : ""}" data-func="${escHtml(i.key)}" style="--c:${i.color};">
-         <i></i>${escHtml(i.label)} <b>${i.n}</b> <small>${Math.round(i.n / total * 100)}%</small></button>`).join("")}</div>`;
+    : items.map(i => `<button type="button" class="pk-chip${pk.func === i.key ? " on" : ""}" data-func="${escHtml(i.key)}" style="--c:${i.color};">
+         <i></i>${escHtml(i.label)} <b>${i.n}</b> <small>${Math.round(i.n / total * 100)}%</small></button>`).join("");
+  pkActualizarDona(items, total);
 
   // Tabla
   const cont = document.getElementById("pk-tabla");
@@ -2213,6 +2229,7 @@ function pintarPicking(){
     ? (a, b) => ordenTurno(a[0]) - ordenTurno(b[0]) || a[1].label.localeCompare(b[1].label, "es")
     : (a, b) => b[1].sin - a[1].sin || a[1].label.localeCompare(b[1].label, "es"));
   const seleccionado = porTurno ? pk.turno : pk.sup;
+  pkActualizarBarraGrupos(ordenados, cols, porTurno, seleccionado);
   document.getElementById("pk-resumen").innerHTML = !ordenados.length ? `<div class="feed-empty">Sin datos.</div>` :
     `<table><thead><tr><th>${porTurno ? "Turno" : "Supervisor"}</th>${cols.map(f => `<th class="num" style="color:${colorFunc(f.nombre)};">${escHtml(f.nombre)}</th>`).join("")}
       <th class="num">Sin asignar</th><th class="num">Total</th><th class="num">% asignado</th></tr></thead>
@@ -2224,6 +2241,81 @@ function pintarPicking(){
         <td class="num">${Math.round((g.total - g.sin) / g.total * 100)}%</td></tr>`).join("")}</tbody></table>`;
   pintarCopiarPicking();
 }
+/* ---------- Gráficas del día (se crean una vez y se actualizan: se repintan con cada asignación) ---------- */
+const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+// Texto al centro de la dona: total de personas.
+const pkCentroDona = { id: "pkCentroDona", afterDraw(chart){
+  if(chart.$total == null) return;
+  const { ctx, chartArea: { left, right, top, bottom } } = chart, cx = (left + right) / 2, cy = (top + bottom) / 2;
+  ctx.save(); ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillStyle = cssVar("--text") || "#1A1D23"; ctx.font = "800 28px 'IBM Plex Mono', monospace"; ctx.fillText(String(chart.$total), cx, cy - 7);
+  ctx.fillStyle = cssVar("--muted") || "#8B92A0"; ctx.font = "600 11px Inter, sans-serif"; ctx.fillText("personas", cx, cy + 15);
+  ctx.restore();
+} };
+function pkActualizarDona(items, total){
+  const box = document.getElementById("pk-dona-box"); if(!box) return;
+  box.hidden = !total;
+  if(!total){ destroyChart("pkDona"); return; }
+  const datos = items.filter(i => i.n > 0);
+  const apply = (ch) => {
+    ch.data.labels = datos.map(i => i.label);
+    ch.data.datasets[0].data = datos.map(i => i.n);
+    ch.data.datasets[0].backgroundColor = datos.map(i => i.color);
+    ch.data.datasets[0].borderColor = cssVar("--panel") || "#fff";
+    ch.$keys = datos.map(i => i.key); ch.$total = total;
+  };
+  if(charts.pkDona){ apply(charts.pkDona); charts.pkDona.update("none"); return; }
+  charts.pkDona = new Chart(document.getElementById("ch-pk-dona"), {
+    type: "doughnut",
+    data: { labels: [], datasets: [{ data: [], backgroundColor: [], borderWidth: 3, hoverOffset: 4 }] },
+    options: { responsive: true, maintainAspectRatio: false, cutout: "64%",
+      plugins: { legend: { display: false },
+        datalabels: { color: "#fff", font: { size: 11, weight: "700" }, display: (c) => c.dataset.data[c.dataIndex] / (c.chart.$total || 1) >= 0.07 },
+        tooltip: { callbacks: { label: (c) => ` ${c.label}: ${c.parsed} (${Math.round(c.parsed / (c.chart.$total || 1) * 100)}%)` } } },
+      onClick: (e, els, chart) => { if(els.length){ const k = chart.$keys[els[0].index]; pk.func = pk.func === k ? "" : k; pintarPicking(); } } },
+    plugins: [pkCentroDona]
+  });
+  apply(charts.pkDona); charts.pkDona.update("none");
+}
+// Filtra por supervisor o turno desde la gráfica o la tabla del resumen (mismo efecto que los selectores).
+function pkFiltrarGrupo(key){
+  if(pk.agrupar === "turno") pk.turno = pk.turno === key ? "" : key; else pk.sup = pk.sup === key ? "" : key;
+  document.getElementById("pk-sup").value = pk.sup; document.getElementById("pk-turno").value = pk.turno;
+  pk.sel.clear(); pintarPicking(); pintarHistorialPicking();
+}
+// Barras apiladas horizontales: una fila por supervisor (o turno) con sus personas por función y "sin asignar".
+function pkActualizarBarraGrupos(ordenados, cols, porTurno, seleccionado){
+  const box = document.getElementById("pk-sup-box"); if(!box) return;
+  box.hidden = !ordenados.length;
+  if(!ordenados.length){ destroyChart("pkSup"); return; }
+  const nombres = cols.map(c => c.nombre);
+  const series = nombres.map(n => ({ label: n, color: colorFunc(n), data: ordenados.map(([, g]) => g.por[n] || 0) })).filter(s => s.data.some(v => v > 0));
+  series.push({ label: "Sin asignar", color: "#9CA3AF", data: ordenados.map(([, g]) => g.sin) });
+  const etiquetas = ordenados.map(([, g]) => g.label);
+  const maxTotal = Math.max(1, ...ordenados.map(([, g]) => g.total));
+  box.style.height = Math.max(240, ordenados.length * 58 + 90) + "px";
+  const { ticks } = ejesChartTema();
+  const corto = (s) => s.length > 26 ? s.slice(0, 25).trimEnd() + "…" : s;
+  const datasets = series.map(s => ({ label: s.label, data: s.data, backgroundColor: s.color, borderRadius: 3, borderSkipped: false, stack: "g", maxBarThickness: 36 }));
+  let ch = charts.pkSup;
+  if(ch && ch.$porTurno === porTurno){
+    ch.data.labels = etiquetas; ch.data.datasets = datasets; ch.$keys = ordenados.map(([k]) => k); ch.$max = maxTotal; ch.update("none"); ch.resize(); return;
+  }
+  destroyChart("pkSup");
+  charts.pkSup = new Chart(document.getElementById("ch-pk-sup"), {
+    type: "bar", data: { labels: etiquetas, datasets },
+    options: { indexAxis: "y", responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: "bottom", labels: { color: ticks.color, boxWidth: 10, font: { size: 11 } } },
+        datalabels: { color: "#fff", font: { size: 10, weight: "700" }, anchor: "center", align: "center",
+          display: (c) => c.dataset.data[c.dataIndex] >= Math.max(1, (c.chart.$max || 1) * 0.07) },
+        tooltip: { callbacks: { title: (it) => it[0].label, label: (c) => ` ${c.dataset.label}: ${c.parsed.x}` } } },
+      scales: { x: { stacked: true, beginAtZero: true, grid: { color: ejesChartTema().grid.color }, ticks: { ...ticks, precision: 0 } },
+                y: { stacked: true, grid: { display: false }, ticks: { ...ticks, callback(v){ return corto(String(this.getLabelForValue(v))); } } } },
+      onClick: (e, els, chart) => { if(els.length) pkFiltrarGrupo(chart.$keys[els[0].index]); } }
+  });
+  charts.pkSup.$porTurno = porTurno; charts.pkSup.$keys = ordenados.map(([k]) => k); charts.pkSup.$max = maxTotal;
+}
+
 function pintarPickingBulk(){
   const bar = document.getElementById("pk-bulk"); if(!bar) return;
   const editable = pkEditable();
@@ -2305,11 +2397,16 @@ function pintarGraficoHist(){
   }
   box.hidden = false; msg.hidden = true;
   const nombres = [...funcionesCat.map(f => f.nombre).filter(n => cuenta[n]), ...Object.keys(cuenta).filter(n => !funcionesCat.some(f => f.nombre === n))];
+  // La gráfica empieza en el primer día con asignaciones (sin una fila de días vacíos antes) y las barras se ven anchas.
+  const primero = fechas.find(f => nombres.some(n => cuenta[n] && cuenta[n][f]));
+  const fechasVer = fechas.filter(f => f >= primero);
+  const hint = document.getElementById("pk-hist-hint");
+  if(hint) hint.textContent = "Personas por función, día a día (aplica Área, Zona, Turno y Supervisor)." + (fechasVer.length < fechas.length ? ` Se muestra desde el ${fmtFecha(primero)}, el primer día con asignaciones.` : "");
   const { grid, ticks } = ejesChartTema();
   charts.pkHist = new Chart(document.getElementById("ch-pk-hist"), {
     type: "bar",
-    data: { labels: fechas.map(fmtFecha), datasets: nombres.map(n => ({
-      label: n, data: fechas.map(f => (cuenta[n] && cuenta[n][f]) || 0), backgroundColor: colorFunc(n), borderRadius: 3, stack: "dia" })) },
+    data: { labels: fechasVer.map(fmtFecha), datasets: nombres.map(n => ({
+      label: n, data: fechasVer.map(f => (cuenta[n] && cuenta[n][f]) || 0), backgroundColor: colorFunc(n), borderRadius: 3, stack: "dia", maxBarThickness: 64 })) },
     options: { responsive: true, maintainAspectRatio: false,
       plugins: { legend: { position: "bottom", labels: { color: ticks.color, boxWidth: 10, font: { size: 11 } } },
                  datalabels: { color: "#fff", anchor: "center", align: "center", font: { size: 10, weight: "700" } } },
