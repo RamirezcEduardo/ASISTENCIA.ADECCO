@@ -246,6 +246,21 @@
   .pk-check input{accent-color:var(--red);}
   .pk-nota{margin:12px 0 0;font-size:12px;color:var(--muted);line-height:1.5;}
   .pk-nota.warn{color:var(--amber);}
+  /* Apartados de Picking: Indicadores / Registro */
+  .pk-subnav{display:flex;gap:4px;margin:2px 0 16px;border-bottom:1px solid var(--border);overflow-x:auto;}
+  .pk-subnav button{background:none;border:none;border-bottom:3px solid transparent;margin-bottom:-1px;padding:11px 20px;font-size:14px;font-weight:700;
+    color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;gap:8px;white-space:nowrap;}
+  .pk-subnav button:hover{color:var(--text-soft);}
+  .pk-subnav button.on{color:var(--text);border-bottom-color:var(--red);}
+  .pk-badge{background:var(--amber-dim);color:var(--amber);border-radius:999px;padding:1px 9px;font-size:11px;font-weight:800;font-family:var(--mono);}
+  #panel-picking[data-vista="ind"] .pk-solo-reg{display:none!important;}
+  .pk-linea{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin:0 0 14px;}
+  .pk-linea span{background:var(--panel);border:1px solid var(--border);border-radius:999px;padding:6px 14px;font-size:12.5px;color:var(--text-soft);}
+  .pk-linea span b{font-family:var(--mono);color:var(--text);margin-right:6px;}
+  .pk-linea span.warn{border-color:rgba(245,166,35,.55);}
+  .pk-linea span.warn b{color:var(--amber);}
+  .pk-linea span.mal b{color:var(--red);}
+  .pk-filtro-activo{background:var(--red-tint);color:var(--red);border:1px solid var(--red);border-radius:999px;padding:6px 14px;font-size:12.5px;font-weight:700;cursor:pointer;}
   .pk-grid-top{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:16px;align-items:start;}
   @media (max-width:1100px){.pk-grid-top{grid-template-columns:minmax(0,1fr);}}
   .pk-dist-wrap{display:flex;flex-wrap:wrap;align-items:center;gap:18px 22px;margin-top:8px;}
@@ -1759,6 +1774,7 @@ const pk = { fecha: null, filas: [], todas: [],   // filas = las que entran a Pi
              areasCfgLabels: [], incluirOtras: false,
              sup: "", turno: "", supInit: false, supNoEncontrado: false, q: "", soloSin: false, func: "",
              sel: new Set(), hist: null, histDias: 14, histT: null,
+             vista: null,           // apartado de Picking: "ind" (indicadores) o "reg" (registro)
              agrupar: "sup",        // resumen del dia: por "sup" o por "turno"
              vistaHist: "dia",      // historial: "dia" | "sup" | "persona"
              soloConAsig: true };   // detalle por persona: ocultar a quien no tuvo funcion en el periodo
@@ -1950,6 +1966,13 @@ async function renderPicking(){
       .map(([k, v]) => `<option value="${escHtml(k)}">${escHtml(v.label)} (${v.n})</option>`).join("") +
     (turnos.sinTurno ? `<option value="${SIN_TURNO}">(Sin turno) (${turnos.sinTurno})</option>` : "");
 
+  // Apartado con el que se abre: el último que usó esta persona; si es la primera vez, los supervisores entran
+  // directo al Registro (su trabajo diario es asignar) y el resto a los Indicadores.
+  if(!pk.vista){
+    let guardada = null; try{ guardada = localStorage.getItem("picking-vista"); }catch(e){}
+    pk.vista = (guardada === "ind" || guardada === "reg") ? guardada : (session.rol === "supervisor" ? "reg" : "ind");
+  }
+
   const supOpts = `<option value="">Todos los supervisores</option>` +
     [...sups.map.entries()].sort((a, b) => a[1].label.localeCompare(b[1].label, "es"))
       .map(([k, v]) => `<option value="${escHtml(k)}">${escHtml(v.label)} (${v.n})</option>`).join("") +
@@ -1967,20 +1990,27 @@ async function renderPicking(){
           </div></div>
         <div class="pk-field"><label>Turno</label><select id="pk-turno">${turnoOpts}</select></div>
         <div class="pk-field"><label>Supervisor</label><select id="pk-sup">${supOpts}</select></div>
-        <div class="pk-field grow"><label>Buscar</label><input type="text" id="pk-buscar" placeholder="Nombre, DNI, puesto, área o función…" value="${escHtml(pk.q)}"></div>
-        <label class="pk-check"><input type="checkbox" id="pk-solo-sin" ${pk.soloSin ? "checked" : ""}>Solo sin asignar</label>
+        <div class="pk-field grow pk-solo-reg"><label>Buscar</label><input type="text" id="pk-buscar" placeholder="Nombre, DNI, puesto, área o función…" value="${escHtml(pk.q)}"></div>
+        <label class="pk-check pk-solo-reg"><input type="checkbox" id="pk-solo-sin" ${pk.soloSin ? "checked" : ""}>Solo sin asignar</label>
         <label class="pk-check" title="Muestra también al personal de áreas que no son de picking (Despacho, 3PL…), por ejemplo para prestar a alguien por un día."><input type="checkbox" id="pk-otras" ${pk.incluirOtras ? "checked" : ""}>Incluir otras áreas</label>
-        <button class="btn-sm" id="pk-copiar" type="button" disabled>📋 Copiar día anterior</button>
-        <button class="btn-sm" id="pk-exportar" type="button">⬇ Excel</button>
+        <button class="btn-sm pk-solo-reg" id="pk-copiar" type="button" disabled>📋 Copiar día anterior</button>
+        <button class="btn-sm pk-solo-reg" id="pk-exportar" type="button">⬇ Excel</button>
       </div>
       <p class="pk-nota" id="pk-nota"></p>
       <p class="pk-nota" id="pk-alcance" style="margin-top:4px;"></p>
     </div>
+    <nav class="pk-subnav" id="pk-subnav">
+      <button type="button" data-v="ind">📊 Indicadores</button>
+      <button type="button" data-v="reg">📝 Registro <span class="pk-badge" id="pk-badge-sin" hidden></span></button>
+    </nav>
+
+    <!-- ===== Apartado INDICADORES: cómo va el día de un vistazo ===== -->
+    <div id="pk-v-ind">
     <div class="kpi-grid" id="pk-kpis"></div>
     <div class="pk-grid-top">
       <div class="card">
         <h3>Distribución del día</h3>
-        <p class="hint">Toca una función (en el gráfico o en la lista) para filtrar la tabla; vuelve a tocarla para quitar el filtro.</p>
+        <p class="hint">Toca una función (en el gráfico o en la lista) para ver en el Registro quién la tiene.</p>
         <div class="pk-dist-wrap">
           <div class="pk-dona-box" id="pk-dona-box"><canvas id="ch-pk-dona"></canvas></div>
           <div id="pk-dist" class="pk-chips pk-chips-col"></div>
@@ -2001,6 +2031,22 @@ async function renderPicking(){
     </div>
     <div class="card">
       <div class="card-header-row">
+        <div><h3>Evolución de la distribución</h3>
+          <p class="hint" id="pk-hist-hint">Personas por función, día a día (aplica Área, Zona, Turno y Supervisor).</p></div>
+        <select id="pk-hist-dias" class="btn-sm">
+          <option value="7">7 días</option><option value="14">14 días</option><option value="30">30 días</option>
+        </select>
+      </div>
+      <div class="chart-box tall" id="pk-hist-box"><canvas id="ch-pk-hist"></canvas></div>
+      <div class="feed-empty" id="pk-hist-msg" hidden></div>
+    </div>
+    </div>
+
+    <!-- ===== Apartado REGISTRO: asignar y consultar quién hizo qué ===== -->
+    <div id="pk-v-reg">
+    <div class="pk-linea" id="pk-linea"></div>
+    <div class="card">
+      <div class="card-header-row">
         <div><h3>Asignación por colaborador</h3>
           <p class="hint" id="pk-tabla-hint"></p></div>
       </div>
@@ -2012,17 +2058,6 @@ async function renderPicking(){
         <button class="btn-sm" id="pk-bulk-limpiar" type="button">Deseleccionar</button>
       </div>
       <div class="table-scroll" id="pk-tabla" style="max-height:560px;"></div>
-    </div>
-    <div class="card">
-      <div class="card-header-row">
-        <div><h3>Evolución de la distribución</h3>
-          <p class="hint" id="pk-hist-hint">Personas por función, día a día (aplica Área, Zona, Turno y Supervisor).</p></div>
-        <select id="pk-hist-dias" class="btn-sm">
-          <option value="7">7 días</option><option value="14">14 días</option><option value="30">30 días</option>
-        </select>
-      </div>
-      <div class="chart-box tall" id="pk-hist-box"><canvas id="ch-pk-hist"></canvas></div>
-      <div class="feed-empty" id="pk-hist-msg" hidden></div>
     </div>
     <div class="card">
       <div class="card-header-row">
@@ -2044,6 +2079,7 @@ async function renderPicking(){
       <div class="pk-leyenda" id="pk-hd-leyenda" hidden></div>
       <div class="table-scroll" id="pk-hd" style="max-height:560px;"></div>
     </div>
+    </div>
   `;
   document.getElementById("pk-sup").value = pk.sup;
   document.getElementById("pk-turno").value = pk.turno;
@@ -2051,13 +2087,33 @@ async function renderPicking(){
   document.getElementById("pk-hd-dias").value = String(pk.histDias);
   destroyChart("pkHist"); destroyChart("pkDona"); destroyChart("pkSup");
   pkEnlazarEventos();
+  pkMostrarVista(false);
   pintarPicking();
   if(pk.hist){ pintarHistorialPicking(); pintarCopiarPicking(); }
   else{ pintarHistDias(); cargarHistorialPicking(gen); }
 }
 
+// Muestra un apartado y oculta el otro. Las gráficas creadas mientras estaban ocultas se redimensionan al mostrarse.
+function pkMostrarVista(guardar){
+  const panel = document.getElementById("panel-picking"); if(!panel || !document.getElementById("pk-v-ind")) return;
+  panel.dataset.vista = pk.vista;
+  document.getElementById("pk-v-ind").hidden = pk.vista !== "ind";
+  document.getElementById("pk-v-reg").hidden = pk.vista !== "reg";
+  document.querySelectorAll("#pk-subnav button").forEach(b => b.classList.toggle("on", b.dataset.v === pk.vista));
+  if(guardar){ try{ localStorage.setItem("picking-vista", pk.vista); }catch(e){} }
+  if(pk.vista === "ind") requestAnimationFrame(() => [charts.pkDona, charts.pkSup, charts.pkHist].forEach(c => { if(c) c.resize(); }));
+}
+// Filtrar por función solo tiene efecto en la tabla (apartado Registro): al elegirla desde un gráfico se pasa a verla.
+function pkFiltrarFuncion(key){
+  pk.func = pk.func === key ? "" : key;
+  if(pk.func){ pk.vista = "reg"; pkMostrarVista(true); }
+  pintarPicking();
+}
+
 function pkEnlazarEventos(){
   const el = (id) => document.getElementById(id);
+  el("pk-subnav").addEventListener("click", (e) => { const b = e.target.closest("button[data-v]"); if(!b) return; pk.vista = b.dataset.v; pkMostrarVista(true); });
+  el("pk-linea").addEventListener("click", (e) => { if(e.target.closest("[data-quitar-func]")){ pk.func = ""; pintarPicking(); } });
   const ir = (f) => { pk.fecha = f || todayISO(); renderTabActivo(); };
   el("pk-fecha").addEventListener("change", (e) => ir(e.target.value));
   el("pk-prev").addEventListener("click", () => ir(addDays(pk.fecha, -1)));
@@ -2088,8 +2144,7 @@ function pkEnlazarEventos(){
 
   el("pk-dist").addEventListener("click", (e) => {
     const chip = e.target.closest(".pk-chip"); if(!chip) return;
-    pk.func = pk.func === chip.dataset.func ? "" : chip.dataset.func;
-    pintarPicking();
+    pkFiltrarFuncion(chip.dataset.func);
   });
   el("pk-res-seg").addEventListener("click", (e) => { const b = e.target.closest("button[data-g]"); if(!b) return; pk.agrupar = b.dataset.g; pintarPicking(); });
   el("pk-resumen").addEventListener("click", (e) => {
@@ -2158,6 +2213,14 @@ function pintarPicking(){
     kpiTile("Vacaciones / Falta", nVac + nFalta, `${nVac} vacaciones · ${nFalta} falta${nFalta === 1 ? "" : "s"}`, nFalta ? "#FF3B4E" : "#3B82F6", "🏖️") +
     kpiTile("Sin asignar", sin, "falta definir su función", sin ? "#F5A623" : "#22C55E", "⏳") +
     kpiTile("Presentes sin función", presSin, "ya marcaron ingreso", presSin ? "#FF3B4E" : "#22C55E", "⚠️");
+
+  // Franja resumen del Registro (para no perder el contexto al estar en ese apartado) y aviso de pendientes en su pestaña.
+  const etiquetaFunc = pk.func === SIN_FUNC ? "Sin asignar" : pk.func;
+  document.getElementById("pk-linea").innerHTML =
+    `<span><b>${vis.length}</b>colaboradores</span><span><b>${conF}</b>con función</span><span><b>${nVac + nFalta}</b>vacaciones / falta</span>` +
+    `<span class="${sin ? "warn" : ""}"><b>${sin}</b>sin asignar</span>` + (presSin ? `<span class="mal"><b>${presSin}</b>presentes sin función</span>` : "") +
+    (pk.func ? `<button type="button" class="pk-filtro-activo" data-quitar-func title="Quitar este filtro">Función: ${escHtml(etiquetaFunc)} ✕</button>` : "");
+  const badge = document.getElementById("pk-badge-sin"); badge.hidden = !sin; badge.textContent = sin;
 
   // Distribución (barra segmentada + chips filtrables)
   const conteo = new Map();
@@ -2272,7 +2335,7 @@ function pkActualizarDona(items, total){
       plugins: { legend: { display: false },
         datalabels: { color: "#fff", font: { size: 11, weight: "700" }, display: (c) => c.dataset.data[c.dataIndex] / (c.chart.$total || 1) >= 0.07 },
         tooltip: { callbacks: { label: (c) => ` ${c.label}: ${c.parsed} (${Math.round(c.parsed / (c.chart.$total || 1) * 100)}%)` } } },
-      onClick: (e, els, chart) => { if(els.length){ const k = chart.$keys[els[0].index]; pk.func = pk.func === k ? "" : k; pintarPicking(); } } },
+      onClick: (e, els, chart) => { if(els.length) pkFiltrarFuncion(chart.$keys[els[0].index]); } },
     plugins: [pkCentroDona]
   });
   apply(charts.pkDona); charts.pkDona.update("none");
