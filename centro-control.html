@@ -622,12 +622,29 @@ document.getElementById("f-hasta").value = filtros.hasta;
 // "En Vivo" no acumula ciclos de refresco cada vez que se cambia un filtro.
 let renderGen = 0;
 
+// Un campo de fecha dispara "change" con CADA dígito que se escribe (la fecha sigue siendo válida), y aplicar el
+// cambio en ese momento reconstruía la pantalla y le quitaba el cursor al usuario. Esta regla común espera a que
+// termine de escribir: se aplica al salir del campo, con Enter, al elegir en el calendario (no hay tecla de por
+// medio) o tras una pausa si dejó de escribir; y no se aplica una fecha a medias (año 0002…).
+function alCambiarFecha(input, aplicar, pausa = 1200){
+  let t = null, pendiente = false, tecla = false;
+  const valida = () => /^\d{4}-\d{2}-\d{2}$/.test(input.value) && Number(input.value.slice(0, 4)) >= 2000;
+  const ejecutar = () => { clearTimeout(t); t = null; tecla = false; if(!pendiente || !valida()) return; pendiente = false; aplicar(input.value); };
+  input.addEventListener("keydown", (e) => { if(e.key === "Enter") ejecutar(); else if(e.key !== "Tab") tecla = true; });
+  input.addEventListener("change", () => { pendiente = true; if(!tecla) ejecutar(); else { clearTimeout(t); t = setTimeout(ejecutar, pausa); } });
+  input.addEventListener("blur", ejecutar);
+}
+
 function aplicarFiltros(){
   let desde = document.getElementById("f-desde").value || filtros.desde;
   let hasta = document.getElementById("f-hasta").value || filtros.hasta;
-  if(desde > hasta){ [desde, hasta] = [hasta, desde]; } // rango invertido: se corrige en vez de mostrar vacio
-  document.getElementById("f-desde").value = desde;
-  document.getElementById("f-hasta").value = hasta;
+  // Rango invertido: se corrige en vez de mostrar vacío. Solo se reescriben los campos si hubo que corregir
+  // (reescribir un campo de fecha que se está editando le reinicia el cursor).
+  if(desde > hasta){
+    [desde, hasta] = [hasta, desde];
+    document.getElementById("f-desde").value = desde;
+    document.getElementById("f-hasta").value = hasta;
+  }
   filtros.desde = desde;
   filtros.hasta = hasta;
   filtros.area = document.getElementById("f-area").value || "";
@@ -637,7 +654,8 @@ function aplicarFiltros(){
 document.getElementById("f-aplicar").addEventListener("click", aplicarFiltros);
 // Se aplica al cambiar cualquier filtro (antes habia que acordarse de pulsar "Aplicar" y,
 // si no, la tabla seguia con el filtro anterior aunque el selector dijera otra cosa).
-["f-desde","f-hasta","f-area","f-zona"].forEach(id => document.getElementById(id).addEventListener("change", aplicarFiltros));
+["f-area","f-zona"].forEach(id => document.getElementById(id).addEventListener("change", aplicarFiltros));
+["f-desde","f-hasta"].forEach(id => alCambiarFecha(document.getElementById(id), aplicarFiltros));
 document.getElementById("f-limpiar").addEventListener("click", () => {
   document.getElementById("f-desde").value = monthStartISO();
   document.getElementById("f-hasta").value = todayISO();
@@ -2088,6 +2106,7 @@ async function renderPicking(){
   destroyChart("pkHist"); destroyChart("pkDona"); destroyChart("pkSup");
   pkEnlazarEventos();
   pkMostrarVista(false);
+  if(pk.refocusFecha){ pk.refocusFecha = false; document.getElementById("pk-fecha").focus(); }
   pintarPicking();
   if(pk.hist){ pintarHistorialPicking(); pintarCopiarPicking(); }
   else{ pintarHistDias(); cargarHistorialPicking(gen); }
@@ -2115,7 +2134,8 @@ function pkEnlazarEventos(){
   el("pk-subnav").addEventListener("click", (e) => { const b = e.target.closest("button[data-v]"); if(!b) return; pk.vista = b.dataset.v; pkMostrarVista(true); });
   el("pk-linea").addEventListener("click", (e) => { if(e.target.closest("[data-quitar-func]")){ pk.func = ""; pintarPicking(); } });
   const ir = (f) => { pk.fecha = f || todayISO(); renderTabActivo(); };
-  el("pk-fecha").addEventListener("change", (e) => ir(e.target.value));
+  // La pantalla se reconstruye al cambiar de día; si el usuario seguía en el campo, el cursor vuelve a él.
+  alCambiarFecha(el("pk-fecha"), (f) => { pk.refocusFecha = document.activeElement === el("pk-fecha"); ir(f); });
   el("pk-prev").addEventListener("click", () => ir(addDays(pk.fecha, -1)));
   el("pk-next").addEventListener("click", () => ir(addDays(pk.fecha, 1)));
   el("pk-hoy").addEventListener("click", () => ir(todayISO()));
