@@ -2931,6 +2931,53 @@ const MV_COLS = {
   turno: ["TURNO", "TURNOS"],
   supervisor: ["SUPERVISOR A CARGO", "SUPERVISOR", "JEFE INMEDIATO"],
 };
+// Formato oficial del archivo (el mismo del Excel de ACTIVOS de RR.HH.), en este orden.
+const MV_COLUMNAS_FORMATO = ["DNI", "APELLIDOS Y NOMBRES", "ESTADO", "MOTIVO DE CESE", "OBSERVACIONES", "F. INGRESO", "F. CESE", "PUESTO", "AREA", "TURNO", "SUPERVISOR A CARGO"];
+const MV_INSTRUCCIONES = [
+  ["FORMATO DEL EXCEL PARA LA CARGA MASIVA"], [""],
+  ["• Una fila por persona, con los títulos de la hoja «ACTIVOS» tal como están (11 columnas)."],
+  ["• Obligatorias: DNI y APELLIDOS Y NOMBRES. El resto puede ir vacío: una celda vacía NO borra el dato que ya tiene la persona."],
+  ["• ESTADO: ACTIVO (si se deja vacío se toma como activo) o CESADO."],
+  ["• Para dar de baja: ESTADO = CESADO, MOTIVO DE CESE (ej. Renuncia, Fin de contrato) y F. CESE. También se propone la baja de quien está en el censo y ya no viene en el archivo; se confirma en la vista previa."],
+  ["• Fechas (F. INGRESO, F. CESE): fecha de Excel o texto AAAA-MM-DD (ej. 2026-10-13)."],
+  ["• TURNO: MAÑANA, TARDE o NOCHE. AREA, PUESTO y SUPERVISOR A CARGO como figuran en el censo."],
+  ["• OBSERVACIONES no se usa en la carga."],
+  ["• Antes de escribir nada, la plataforma muestra qué cambia y tú confirmas."],
+];
+// Arma el libro del formato: vacío (solo títulos) o con el personal actual para editarlo y volver a subirlo.
+function mvArmarFormato(personal){
+  const filas = (personal || []).slice().sort((a, b) => cmpNombre(a.nombre, b.nombre)).map(r => ({
+    "DNI": r.dni, "APELLIDOS Y NOMBRES": r.nombre, "ESTADO": "ACTIVO", "MOTIVO DE CESE": "", "OBSERVACIONES": "",
+    "F. INGRESO": r.f_ingreso || "", "F. CESE": "", "PUESTO": r.puesto || "", "AREA": r.area || "", "TURNO": r.turno || "", "SUPERVISOR A CARGO": r.supervisor || "" }));
+  const ws = XLSX.utils.json_to_sheet(filas, { header: MV_COLUMNAS_FORMATO });
+  if(!filas.length) XLSX.utils.sheet_add_aoa(ws, [MV_COLUMNAS_FORMATO], { origin: "A1" });   // sin datos igual lleva los títulos
+  ws["!cols"] = [12, 40, 10, 24, 22, 12, 12, 28, 22, 10, 36].map(w => ({ wch: w }));
+  const ayuda = XLSX.utils.aoa_to_sheet(MV_INSTRUCCIONES); ayuda["!cols"] = [{ wch: 130 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "ACTIVOS");
+  XLSX.utils.book_append_sheet(wb, ayuda, "Instrucciones");
+  return wb;
+}
+async function mvDescargarFormato(conPersonal){
+  try{
+    const personal = conPersonal ? ((await rpc("asis_personal_actual", {})) || []).filter(r => (r.estado || "").toUpperCase() === "ACTIVO") : null;
+    XLSX.writeFile(mvArmarFormato(personal), conPersonal ? `personal_actual_${todayISO()}.xlsx` : "formato_carga_activos.xlsx");
+    toast(conPersonal ? `Se descargaron ${personal.length} personas en el formato de carga` : "Formato descargado");
+  }catch(e){ toast("No se pudo descargar: " + mvErr(e), true); }
+}
+const mvFormatoHtml = (conPersonal) => `
+  <details class="pk-detalle" style="margin:0 0 14px;"><summary>Formato del archivo: ${MV_COLUMNAS_FORMATO.length} columnas</summary>
+    <div class="pk-chips" style="margin:10px 0 6px;">${MV_COLUMNAS_FORMATO.map((c, i) => `<span class="pk-chip" style="--c:${i < 2 ? "#FF3B4E" : "#9CA3AF"};cursor:default;"><i></i>${c}${i < 2 ? " <small>obligatoria</small>" : ""}</span>`).join("")}</div>
+    <p class="hint" style="margin:6px 0 0;">Es el mismo formato del Excel de ACTIVOS de RR.HH. Las celdas vacías no borran datos. Para dar de baja: ESTADO = CESADO con su MOTIVO DE CESE y F. CESE. El archivo descargado trae una hoja «Instrucciones».</p>
+  </details>
+  <div class="pk-controls" style="margin-bottom:14px;">
+    <button class="btn-sm" type="button" id="mv-fmt-vacio">⬇ Descargar el formato (vacío)</button>
+    ${conPersonal ? `<button class="btn-sm" type="button" id="mv-fmt-actual">⬇ Descargar el personal actual en este formato</button>` : ""}
+  </div>`;
+function mvEnlazarFormato(){
+  document.getElementById("mv-fmt-vacio")?.addEventListener("click", () => mvDescargarFormato(false));
+  document.getElementById("mv-fmt-actual")?.addEventListener("click", () => mvDescargarFormato(true));
+}
 function mvFechaISO(v){
   if(v == null || v === "") return null;
   if(typeof v === "number" && v > 20000 && v < 80000) return new Date(Math.round((v - 25569) * 86400000)).toISOString().slice(0, 10);   // fecha de Excel
@@ -2953,7 +3000,10 @@ function mvLeerExcel(buffer){
       Object.entries(MV_COLS).forEach(([k, alias]) => { const j = nombres.findIndex(n => alias.includes(n)); if(j >= 0) idx[k] = j; });
     }
   }
-  if(hdr < 0 || idx.dni == null || idx.nombre == null) throw new Error("No se encontró la fila de títulos con las columnas DNI y APELLIDOS Y NOMBRES.");
+  if(hdr < 0 || idx.dni == null || idx.nombre == null){
+    const encontrados = (hoja[Math.max(hdr, 0)] || hoja[0] || []).map(c => String(c ?? "").trim()).filter(Boolean).slice(0, 14);
+    throw new Error(`El archivo no tiene el formato esperado: faltan los títulos «DNI» y «APELLIDOS Y NOMBRES» en la primera hoja. Títulos encontrados: ${encontrados.join(", ") || "ninguno"}. Descarga el formato con el botón de arriba.`);
+  }
   const avisos = [], filas = [], vistos = new Set();
   const txt = (row, k) => { const v = idx[k] == null ? null : row[idx[k]]; if(v == null) return null; const s = String(v).replace(/\s+/g, " ").trim(); return s || null; };
   for(let i = hdr + 1; i < hoja.length; i++){
@@ -2967,7 +3017,9 @@ function mvLeerExcel(buffer){
     if(vistos.has(dni)){ avisos.push(`Fila ${n}: el DNI ${dni} está repetido (se usa la primera aparición).`); continue; }
     vistos.add(dni);
     const estadoTxt = normArea(txt(row, "estado") || "");
-    const cesado = !!estadoTxt && !estadoTxt.startsWith("ACTIV");
+    // Solo se trata como baja lo que el archivo dice claramente (CESADO, BAJA, RENUNCIA…); un estado raro NO da de baja a nadie.
+    const cesado = /^(CES|BAJA|RENUN|DESPED|DESVINC|FINALIZ|RETIR|TERMIN)/.test(estadoTxt);
+    if(estadoTxt && !cesado && !estadoTxt.startsWith("ACTIV")) avisos.push(`Fila ${n}: el estado «${estadoTxt}» de ${dni} no se reconoce (se trata como activo).`);
     const areaRaw = (txt(row, "area") || "").toUpperCase();
     const fi = mvFechaISO(idx.f_ingreso == null ? null : row[idx.f_ingreso]), fc = mvFechaISO(idx.f_cese == null ? null : row[idx.f_cese]);
     if(fi === "INVALIDA") avisos.push(`Fila ${n}: la fecha de ingreso de ${dni} no se entiende (se ignora).`);
@@ -3038,7 +3090,12 @@ async function renderMovimientos(){
     mv.rows = mv.rows || []; mv.imps = mv.imps || [];
   }catch(e){
     if(gen !== renderGen) return;
-    panel.innerHTML = migracion0013Faltante(e) ? bannerMigracion0016() : `<div class="loading">Error: ${escHtml(mvErr(e))}</div>`;
+    const falta = migracion0013Faltante(e);
+    // Aunque falte la migración, el formato del Excel ya se puede descargar para ir preparando el archivo.
+    panel.innerHTML = falta ? bannerMigracion0016() + (puedeCargar ? `<div class="card"><h3>Formato del Excel para la carga masiva</h3>
+      <p class="hint">Descarga el formato y llénalo con el personal; cuando se aplique la migración podrás subirlo aquí.</p>${mvFormatoHtml(false)}</div>` : "")
+      : `<div class="loading">Error: ${escHtml(mvErr(e))}</div>`;
+    if(falta) mvEnlazarFormato();
     return;
   }
   if(gen !== renderGen) return;
@@ -3057,6 +3114,7 @@ async function renderMovimientos(){
           <li>Quien <strong>ya no figura</strong> se propone como <strong>cesado</strong>: eliges a quién sí y con qué motivo (renuncia, fin de contrato…).</li>
           <li>Cada cambio queda en el <strong>historial</strong>. Volver a subir el mismo archivo no duplica nada.</li>
         </ul>
+        ${mvFormatoHtml(true)}
         <div class="mv-subir">
           <label class="mv-drop" id="mv-drop"><input type="file" id="mv-file" accept=".xlsx,.xls,.csv" hidden>
             <b>Arrastra el Excel aquí</b><span>o haz clic para elegir el archivo</span></label>
@@ -3099,6 +3157,7 @@ function mvMostrarSub(){
 function mvEnlazar(){
   const el = (id) => document.getElementById(id);
   el("mv-subnav").addEventListener("click", (e) => { const b = e.target.closest("button[data-v]"); if(b){ mv.sub = b.dataset.v; mvMostrarSub(); } });
+  mvEnlazarFormato();
   const drop = el("mv-drop"), inp = el("mv-file");
   if(drop){
     inp.addEventListener("change", () => { if(inp.files[0]) mvCargarArchivo(inp.files[0]); inp.value = ""; });
