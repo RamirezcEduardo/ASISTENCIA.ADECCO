@@ -261,6 +261,19 @@
   .pk-linea span.warn b{color:var(--amber);}
   .pk-linea span.mal b{color:var(--red);}
   .pk-filtro-activo{background:var(--red-tint);color:var(--red);border:1px solid var(--red);border-radius:999px;padding:6px 14px;font-size:12.5px;font-weight:700;cursor:pointer;}
+  /* Movimientos: carga del Excel e historial */
+  .mv-subir{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;}
+  .mv-drop{flex:1;min-width:260px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:26px 16px;
+    border:2px dashed var(--border);border-radius:14px;background:var(--panel-alt);cursor:pointer;text-align:center;color:var(--text-soft);}
+  .mv-drop b{font-size:14px;color:var(--text);} .mv-drop span{font-size:12px;color:var(--muted);}
+  .mv-drop:hover,.mv-drop.drag{border-color:var(--red);background:var(--red-tint);}
+  .pk-nota.warn{color:var(--amber);}
+  .mv-tipo{display:inline-block;padding:3px 11px;border-radius:999px;font-size:11.5px;font-weight:700;white-space:nowrap;}
+  .mv-camb{background:var(--amber-dim);color:var(--amber);}
+  .mv-aplicar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;position:sticky;bottom:12px;z-index:5;box-shadow:var(--shadow);border-color:var(--red);}
+  .mv-resumen{font-size:13px;color:var(--text-soft);line-height:1.6;flex:1;min-width:240px;}
+  .mv-resumen b{color:var(--text);font-family:var(--mono);}
+  .mv-ok{border-color:var(--green);}
   .pk-grid-top{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:16px;align-items:start;}
   @media (max-width:1100px){.pk-grid-top{grid-template-columns:minmax(0,1fr);}}
   .pk-dist-wrap{display:flex;flex-wrap:wrap;align-items:center;gap:18px 22px;margin-top:8px;}
@@ -403,6 +416,7 @@
     <button data-tab="general">📊 Asistencia General</button>
     <button data-tab="personal">🪪 Personal</button>
     <button data-tab="pagos">💰 Pagos</button>
+    <button data-tab="movimientos" id="tab-movimientos" hidden>🔁 Movimientos</button>
     <button data-tab="config" id="tab-config" hidden>⚙️ Configuración</button>
   </nav>
 
@@ -424,6 +438,7 @@
     <section class="tab-panel" id="panel-personal"></section>
     <section class="tab-panel" id="panel-pagos"></section>
     <section class="tab-panel" id="panel-picking"></section>
+    <section class="tab-panel" id="panel-movimientos"></section>
     <section class="tab-panel" id="panel-config"></section>
   </main>
 </div>
@@ -786,9 +801,9 @@ function renderTabActivo(){
   // "Personal" tampoco usa fechas: es la lista de activos de hoy (solo respeta Area y Zona).
   // "Picking" tiene su propia fecha (un dia a la vez) y "Configuración" no filtra nada.
   const esVivo = tabActivo === "vivo";
-  const sinFechas = esVivo || ["personal","picking","config"].includes(tabActivo);
+  const sinFechas = esVivo || ["personal","picking","config","movimientos"].includes(tabActivo);
   document.getElementById("filter-fechas").classList.toggle("oculto", sinFechas);
-  document.getElementById("filter-bar").hidden = tabActivo === "config";
+  document.getElementById("filter-bar").hidden = tabActivo === "config" || tabActivo === "movimientos";
   const filtrosActivos = (filtros.area || filtros.zona) ? " · " + etiquetaFiltro("") : "";
   document.getElementById("f-hint").textContent = (esVivo
     ? `Hoy, ${new Date().toLocaleDateString("es-PE",{weekday:"long",day:"numeric",month:"long"})} · en vivo`
@@ -804,6 +819,7 @@ function renderTabActivo(){
   else if(tabActivo === "general") renderGeneral();
   else if(tabActivo === "personal") renderPersonal();
   else if(tabActivo === "pagos") renderPagos();
+  else if(tabActivo === "movimientos") renderMovimientos();
   else if(tabActivo === "config") renderConfig();
 }
 
@@ -2883,6 +2899,427 @@ async function moverFuncion(id, delta){
   await recargarConfig();
 }
 
+/* ================= TAB: Movimientos (actualización masiva desde el Excel de ACTIVOS + historial) =================
+   Se carga el Excel de RR.HH.: la plataforma lo compara con el censo, muestra qué cambia (turno, área, puesto,
+   supervisor), quién es nuevo, quién reingresa y a quién propone dar de baja, y SOLO escribe lo que el usuario
+   confirma. Cada movimiento queda registrado para llevar el control de ceses, renuncias y rotación. */
+const MV_ROLES_VER = ["admin","rrhh","coordinador","gerencia"];
+const MV_ROLES_CARGAR = ["admin","rrhh"];
+const MV_MOTIVO_DEFECTO = "No figura en el listado de activos";
+const MV_MOTIVOS = ["Renuncia","Fin de contrato","Despido","Abandono de trabajo","Término del periodo de prueba", MV_MOTIVO_DEFECTO];
+const MV_CAMPOS = { turno: "Turno", area: "Área", puesto: "Puesto", supervisor: "Supervisor" };
+// Variantes mal escritas que trae el Excel de RR.HH. y que ya existen bien escritas en el censo.
+const MV_AREA_FIX = { "3PL INTBOUND": "3PL INBOUND", "3PL OUTBOND": "3PL OUTBOUND", "KNNAP": "KNAPP", "KNAPP/RENCAJADO": "KNAPP/REENCAJADO",
+  "RENCAJADO": "REENCAJADO", "REINYETADO": "REINYECTADO", "CAMARA DE FRIO OLT": "CAMARA DE FRIO/ OLT" };
+const mv = { sub: null, desde: null, hasta: null, tipo: "", q: "", rows: [], imps: [], archivo: "", fecha: null, roster: null, filas: null,
+             avisos: [], plan: null, detalle: "cambios", campo: "", soloRecientes: false, bajas: new Map(), cambiosOff: new Set(), resultado: null, ocupado: false };
+const mvCambiosAplicar = () => mv.plan ? mv.plan.cambios.filter(c => !mv.cambiosOff.has(c.dni + "|" + c.campo)).length : 0;
+const bannerMigracion0016 = () => `<div class="banner">Falta aplicar la migración <strong>0016_asis_movimientos_importacion.sql</strong> en Supabase (SQL Editor → pegar el archivo completo → Run). Después recarga esta página.</div>`;
+const mvErr = (e) => humanError(e, { FECHA_FUERA_DE_RANGO: "La fecha del censo debe estar entre los últimos 7 días y hoy.", DATOS_INCOMPLETOS: "El archivo no trae personal activo o no tiene el formato esperado." });
+
+/* ---------- Lectura y limpieza del Excel ---------- */
+const mvNormCol = (s) => normArea(String(s ?? "")).replace(/[.\s]+/g, " ").trim();
+const MV_COLS = {
+  dni: ["DNI", "DOCUMENTO", "N DOCUMENTO", "NRO DOCUMENTO", "NUMERO DOCUMENTO"],
+  nombre: ["APELLIDOS Y NOMBRES", "NOMBRES Y APELLIDOS", "APELLIDOS NOMBRES", "NOMBRE", "COLABORADOR", "NOMBRE COMPLETO"],
+  estado: ["ESTADO", "SITUACION"],
+  motivo: ["MOTIVO DE CESE", "MOTIVO CESE", "MOTIVO"],
+  f_ingreso: ["F INGRESO", "FECHA INGRESO", "FECHA DE INGRESO", "INGRESO"],
+  f_cese: ["F CESE", "FECHA CESE", "FECHA DE CESE", "CESE"],
+  puesto: ["PUESTO", "CARGO"],
+  area: ["AREA"],
+  turno: ["TURNO", "TURNOS"],
+  supervisor: ["SUPERVISOR A CARGO", "SUPERVISOR", "JEFE INMEDIATO"],
+};
+function mvFechaISO(v){
+  if(v == null || v === "") return null;
+  if(typeof v === "number" && v > 20000 && v < 80000) return new Date(Math.round((v - 25569) * 86400000)).toISOString().slice(0, 10);   // fecha de Excel
+  if(v instanceof Date && !isNaN(v)) return new Date(v.getTime() + 12 * 3600000).toISOString().slice(0, 10);
+  const s = String(v).trim(); if(!s || s.toUpperCase() === "NA" || s === "-") return null;
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if(m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/); if(m){ const y = m[3].length === 2 ? "20" + m[3] : m[3]; return `${y}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`; }
+  return "INVALIDA";
+}
+function mvLeerExcel(buffer){
+  // sheetRows limita la lectura: el archivo de RR.HH. trae miles de filas vacías al final y pesa 12 MB.
+  const wb = XLSX.read(buffer, { type: "array", sheetRows: 8000 });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const hoja = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null, blankrows: false });
+  let hdr = -1, idx = {};
+  for(let i = 0; i < Math.min(hoja.length, 20) && hdr < 0; i++){
+    const nombres = hoja[i].map(mvNormCol);
+    if(nombres.some(n => MV_COLS.dni.includes(n))){
+      hdr = i;
+      Object.entries(MV_COLS).forEach(([k, alias]) => { const j = nombres.findIndex(n => alias.includes(n)); if(j >= 0) idx[k] = j; });
+    }
+  }
+  if(hdr < 0 || idx.dni == null || idx.nombre == null) throw new Error("No se encontró la fila de títulos con las columnas DNI y APELLIDOS Y NOMBRES.");
+  const avisos = [], filas = [], vistos = new Set();
+  const txt = (row, k) => { const v = idx[k] == null ? null : row[idx[k]]; if(v == null) return null; const s = String(v).replace(/\s+/g, " ").trim(); return s || null; };
+  for(let i = hdr + 1; i < hoja.length; i++){
+    const row = hoja[i]; const n = i + 1;   // n = número de fila en Excel
+    let dni = idx.dni == null ? null : row[idx.dni];
+    if(dni == null || String(dni).trim() === "") continue;
+    dni = typeof dni === "number" ? String(Math.trunc(dni)) : String(dni).replace(/\s+/g, "").replace(/\.0+$/, "");
+    if(!/^\d{6,9}$/.test(dni)){ avisos.push(`Fila ${n}: DNI «${dni}» no es válido (se ignora).`); continue; }
+    const nombre = (txt(row, "nombre") || "").toUpperCase();
+    if(!nombre){ avisos.push(`Fila ${n}: el DNI ${dni} no tiene nombre (se ignora).`); continue; }
+    if(vistos.has(dni)){ avisos.push(`Fila ${n}: el DNI ${dni} está repetido (se usa la primera aparición).`); continue; }
+    vistos.add(dni);
+    const estadoTxt = normArea(txt(row, "estado") || "");
+    const cesado = !!estadoTxt && !estadoTxt.startsWith("ACTIV");
+    const areaRaw = (txt(row, "area") || "").toUpperCase();
+    const fi = mvFechaISO(idx.f_ingreso == null ? null : row[idx.f_ingreso]), fc = mvFechaISO(idx.f_cese == null ? null : row[idx.f_cese]);
+    if(fi === "INVALIDA") avisos.push(`Fila ${n}: la fecha de ingreso de ${dni} no se entiende (se ignora).`);
+    if(fc === "INVALIDA") avisos.push(`Fila ${n}: la fecha de cese de ${dni} no se entiende (se ignora).`);
+    filas.push({ fila: n, dni, nombre, cesado, estadoTxt,
+      area: MV_AREA_FIX[areaRaw] || areaRaw || null, puesto: txt(row, "puesto"), turno: (txt(row, "turno") || "").toUpperCase() || null,
+      supervisor: txt(row, "supervisor"), motivo: txt(row, "motivo"),
+      f_ingreso: fi === "INVALIDA" ? null : fi, f_cese: fc === "INVALIDA" ? null : fc });
+  }
+  const faltan = ["puesto", "area", "turno", "supervisor"].filter(k => idx[k] == null).map(k => MV_CAMPOS[k]);
+  if(faltan.length) avisos.unshift(`El archivo no tiene la(s) columna(s): ${faltan.join(", ")}. Esos datos no se actualizarán.`);
+  return { filas, avisos, hoja: wb.SheetNames[0] };
+}
+
+/* ---------- Comparación con el censo ---------- */
+function mvCalcularPlan(filas, roster){
+  const mapa = new Map(roster.map(r => [r.dni, r]));
+  const buscar = (d) => {
+    if(mapa.has(d)) return d;
+    if(d.length < 8 && mapa.has(d.padStart(8, "0"))) return d.padStart(8, "0");
+    const sinCeros = d.replace(/^0+/, ""); return sinCeros !== d && mapa.has(sinCeros) ? sinCeros : null;
+  };
+  const plan = { activos: [], sinCambios: 0, cambios: [], nuevos: [], reingresos: [], bajas: [], porClave: new Map() };
+  const vistos = new Set(), explicitas = new Map();
+  filas.forEach(e => {
+    const clave = buscar(e.dni), r = clave ? mapa.get(clave) : null;
+    if(e.cesado){   // el archivo ya trae a esta persona como cesada: es una baja con su motivo y fecha
+      if(r && (r.estado || "").toUpperCase() === "ACTIVO"){ vistos.add(clave); explicitas.set(clave, e); }
+      return;
+    }
+    const item = { ...e, clave: clave || e.dni };
+    plan.activos.push(item);
+    if(!r){ plan.nuevos.push(item); return; }
+    vistos.add(clave);
+    if((r.estado || "").toUpperCase() !== "ACTIVO"){ plan.reingresos.push({ ...item, previo: r }); return; }
+    let hubo = false;
+    Object.keys(MV_CAMPOS).forEach(c => {
+      if(e[c] && normNombre(e[c]) !== normNombre(r[c])){ hubo = true; plan.cambios.push({ dni: clave, nombre: r.nombre, campo: c, antes: r[c], ahora: e[c] }); }
+    });
+    if(!hubo) plan.sinCambios++;
+  });
+  // Bajas: activas en el censo que ya no vienen en el archivo (propuestas) o que el archivo marca como cesadas.
+  roster.forEach(r => {
+    if((r.estado || "").toUpperCase() !== "ACTIVO") return;
+    const ex = explicitas.get(r.dni);
+    if(ex) plan.bajas.push({ ...r, explicita: true, motivo: ex.motivo || "Cese según el Excel", f_cese: ex.f_cese });
+    else if(!vistos.has(r.dni)) plan.bajas.push({ ...r, explicita: false, motivo: MV_MOTIVO_DEFECTO, f_cese: null });
+  });
+  plan.activosCenso = roster.filter(r => (r.estado || "").toUpperCase() === "ACTIVO").length;
+  return plan;
+}
+
+/* ---------- Pantalla ---------- */
+async function renderMovimientos(){
+  const gen = renderGen;
+  const panel = document.getElementById("panel-movimientos");
+  if(!MV_ROLES_VER.includes(session.rol)){
+    panel.innerHTML = `<div class="banner">Tu rol (${escHtml(ROLE_LABELS[session.rol] || session.rol)}) no tiene acceso a los movimientos de personal.</div>`;
+    return;
+  }
+  const puedeCargar = MV_ROLES_CARGAR.includes(session.rol);
+  if(!puedeCargar || !mv.sub) mv.sub = puedeCargar ? "cargar" : "historial";
+  if(!mv.desde){ mv.hasta = todayISO(); mv.desde = addDays(mv.hasta, -30); }
+  mv.fecha = mv.fecha || todayISO();
+  panel.innerHTML = `<div class="loading">Cargando…</div>`;
+  try{
+    [mv.rows, mv.imps] = await Promise.all([rpc("asis_movimientos_listar", { p_desde: mv.desde, p_hasta: mv.hasta }), rpc("asis_importaciones_listar", {})]);
+    mv.rows = mv.rows || []; mv.imps = mv.imps || [];
+  }catch(e){
+    if(gen !== renderGen) return;
+    panel.innerHTML = migracion0013Faltante(e) ? bannerMigracion0016() : `<div class="loading">Error: ${escHtml(mvErr(e))}</div>`;
+    return;
+  }
+  if(gen !== renderGen) return;
+
+  panel.innerHTML = `
+    <nav class="pk-subnav" id="mv-subnav">
+      ${puedeCargar ? `<button type="button" data-v="cargar">⬆ Cargar Excel</button>` : ""}
+      <button type="button" data-v="historial">📜 Historial de movimientos</button>
+    </nav>
+    <div id="mv-cargar" ${puedeCargar ? "" : "hidden"}>
+      <div class="card">
+        <h3>Actualizar el personal desde el Excel de ACTIVOS</h3>
+        <p class="hint">Sube el archivo de RR.HH. con el personal activo. Antes de escribir nada verás qué cambia: turnos, áreas, puestos y supervisores, quién es nuevo, quién reingresa y a quién se propone dar de baja. Tú confirmas.</p>
+        <ul class="cfg-lista" style="margin:0 0 14px;">
+          <li>Quien está en el Excel queda <strong>activo</strong> con los datos del archivo (la fecha de ingreso histórica no se pisa).</li>
+          <li>Quien <strong>ya no figura</strong> se propone como <strong>cesado</strong>: eliges a quién sí y con qué motivo (renuncia, fin de contrato…).</li>
+          <li>Cada cambio queda en el <strong>historial</strong>. Volver a subir el mismo archivo no duplica nada.</li>
+        </ul>
+        <div class="mv-subir">
+          <label class="mv-drop" id="mv-drop"><input type="file" id="mv-file" accept=".xlsx,.xls,.csv" hidden>
+            <b>Arrastra el Excel aquí</b><span>o haz clic para elegir el archivo</span></label>
+          <div class="pk-field"><label>Fecha del censo</label><input type="date" id="mv-fecha" value="${mv.fecha}" min="${addDays(todayISO(), -7)}" max="${todayISO()}"></div>
+        </div>
+        <p class="pk-nota" id="mv-estado"></p>
+      </div>
+      <div id="mv-preview"></div>
+    </div>
+    <div id="mv-historial">
+      <div class="card">
+        <div class="pk-controls">
+          <div class="pk-field"><label>Desde</label><input type="date" id="mv-desde" value="${mv.desde}"></div>
+          <div class="pk-field"><label>Hasta</label><input type="date" id="mv-hasta" value="${mv.hasta}"></div>
+          <div class="pk-field"><label>Movimiento</label><select id="mv-tipo">
+            <option value="">Todos</option><option value="ALTA">Altas</option><option value="BAJA">Bajas (ceses y renuncias)</option><option value="REINGRESO">Reingresos</option>
+            <option value="turno">Cambios de turno</option><option value="area">Cambios de área</option><option value="puesto">Cambios de puesto</option><option value="supervisor">Cambios de supervisor</option></select></div>
+          <div class="pk-field grow"><label>Buscar</label><input type="text" id="mv-buscar" placeholder="Nombre, DNI, motivo o usuario…"></div>
+          <button class="btn-sm" id="mv-excel" type="button">⬇ Excel</button>
+        </div>
+      </div>
+      <div class="kpi-grid" id="mv-kpis"></div>
+      <div class="card"><h3>Movimientos</h3><p class="hint" id="mv-h-hint"></p><div class="table-scroll" id="mv-tabla" style="max-height:560px;"></div></div>
+      <div class="card"><h3>Cargas realizadas</h3><p class="hint">Cada vez que se sube un Excel queda registrado quién lo hizo y cuánto cambió.</p><div class="table-scroll" id="mv-imps" style="max-height:320px;"></div></div>
+    </div>`;
+  document.getElementById("mv-tipo").value = mv.tipo;
+  document.getElementById("mv-buscar").value = mv.q;
+  mvEnlazar();
+  mvMostrarSub();
+  mvPintarHistorial();
+  mvPintarPreview();
+}
+function mvMostrarSub(){
+  const puedeCargar = MV_ROLES_CARGAR.includes(session.rol);
+  if(!puedeCargar) mv.sub = "historial";
+  document.getElementById("mv-cargar").hidden = mv.sub !== "cargar" || !puedeCargar;
+  document.getElementById("mv-historial").hidden = mv.sub !== "historial";
+  document.querySelectorAll("#mv-subnav button").forEach(b => b.classList.toggle("on", b.dataset.v === mv.sub));
+}
+function mvEnlazar(){
+  const el = (id) => document.getElementById(id);
+  el("mv-subnav").addEventListener("click", (e) => { const b = e.target.closest("button[data-v]"); if(b){ mv.sub = b.dataset.v; mvMostrarSub(); } });
+  const drop = el("mv-drop"), inp = el("mv-file");
+  if(drop){
+    inp.addEventListener("change", () => { if(inp.files[0]) mvCargarArchivo(inp.files[0]); inp.value = ""; });
+    ["dragenter", "dragover"].forEach(t => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("drag"); }));
+    ["dragleave", "drop"].forEach(t => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("drag"); }));
+    drop.addEventListener("drop", (e) => { const f = e.dataTransfer && e.dataTransfer.files[0]; if(f) mvCargarArchivo(f); });
+    alCambiarFecha(el("mv-fecha"), (f) => { mv.fecha = f; mvPintarPreview(); });
+  }
+  // Historial: los filtros solo repintan la tabla (no reconstruyen los campos, para no perder el cursor).
+  const recargar = async () => { try{ mv.rows = (await rpc("asis_movimientos_listar", { p_desde: mv.desde, p_hasta: mv.hasta })) || []; mvPintarHistorial(); }catch(e){ toast("No se pudo cargar: " + mvErr(e), true); } };
+  alCambiarFecha(el("mv-desde"), (f) => { mv.desde = f; if(mv.desde > mv.hasta){ mv.hasta = mv.desde; el("mv-hasta").value = mv.hasta; } recargar(); });
+  alCambiarFecha(el("mv-hasta"), (f) => { mv.hasta = f; if(mv.desde > mv.hasta){ mv.desde = mv.hasta; el("mv-desde").value = mv.desde; } recargar(); });
+  el("mv-tipo").addEventListener("change", (e) => { mv.tipo = e.target.value; mvPintarHistorial(); });
+  el("mv-buscar").addEventListener("input", (e) => { mv.q = e.target.value; mvPintarHistorial(); });
+  el("mv-excel").addEventListener("click", mvExportarHistorial);
+}
+
+async function mvCargarArchivo(file){
+  const est = document.getElementById("mv-estado");
+  const pon = (t, malo) => { est.textContent = t; est.classList.toggle("warn", !!malo); };
+  if(mv.ocupado) return;
+  mv.ocupado = true; mv.resultado = null; mv.plan = null; mvPintarPreview();
+  try{
+    pon(`Leyendo «${file.name}»…`);
+    await new Promise(r => setTimeout(r, 40));   // deja pintar el mensaje antes de leer un archivo pesado
+    const lectura = mvLeerExcel(await file.arrayBuffer());
+    pon("Comparando con el personal actual…");
+    mv.roster = (await rpc("asis_personal_actual", {})) || [];
+    mv.archivo = file.name; mv.filas = lectura.filas; mv.avisos = lectura.avisos;
+    if(!lectura.filas.some(f => !f.cesado)) throw new Error("El archivo no tiene personal activo.");
+    mv.plan = mvCalcularPlan(lectura.filas, mv.roster);
+    mv.bajas = new Map(mv.plan.bajas.map(b => [b.dni, { sel: true, motivo: b.motivo, f_cese: b.f_cese }]));
+    mv.cambiosOff = new Set();
+    mv.detalle = mv.plan.cambios.length ? "cambios" : mv.plan.bajas.length ? "bajas" : mv.plan.nuevos.length ? "nuevos" : "cambios";
+    mv.campo = ""; mv.soloRecientes = false;
+    pon(`«${file.name}» leído: ${lectura.filas.length} filas. Revisa los cambios y confirma abajo.`);
+  }catch(e){
+    mv.plan = null;
+    pon("No se pudo leer el archivo: " + (e && e.message ? e.message : e), true);
+  }finally{ mv.ocupado = false; mvPintarPreview(); }
+}
+
+function mvPintarPreview(){
+  const cont = document.getElementById("mv-preview"); if(!cont) return;
+  if(mv.resultado){
+    const r = mv.resultado;
+    cont.innerHTML = `<div class="card mv-ok"><h3>✅ Actualización aplicada al censo del ${fmtFecha(r.fecha)}</h3>
+      <div class="pk-linea" style="margin-top:12px;"><span><b>${r.activos}</b>activos</span><span><b>${r.nuevos}</b>altas</span><span><b>${r.reingresos}</b>reingresos</span>
+      <span><b>${r.cambios}</b>cambios</span><span class="${r.bajas ? "mal" : ""}"><b>${r.bajas}</b>bajas</span>${r.mantenidos ? `<span><b>${r.mantenidos}</b>se conservan activos</span>` : ""}</div>
+      <p class="hint" style="margin:12px 0;">Ya está reflejado en Picking, Personal y el resto de pestañas. El detalle quedó en el historial.</p>
+      <button class="btn-sm primary" type="button" id="mv-ver-hist">Ver historial</button> <button class="btn-sm" type="button" id="mv-otro">Cargar otro archivo</button></div>`;
+    document.getElementById("mv-ver-hist").addEventListener("click", async () => { mv.resultado = null; mv.sub = "historial"; renderTabActivo(); });
+    document.getElementById("mv-otro").addEventListener("click", () => { mv.resultado = null; mv.plan = null; mvPintarPreview(); });
+    return;
+  }
+  const p = mv.plan; if(!p){ cont.innerHTML = ""; return; }
+  const pctBajas = p.activosCenso ? Math.round(p.bajas.length / p.activosCenso * 100) : 0;
+  const alerta = p.bajas.length >= 40 || pctBajas >= 12;
+  const chips = [["cambios", "Cambios", p.cambios.length, "#F5A623"], ["nuevos", "Nuevos", p.nuevos.length, "#22C55E"], ["reingresos", "Reingresos", p.reingresos.length, "#3B82F6"],
+                 ["bajas", "Bajas propuestas", p.bajas.length, "#FF3B4E"], ["avisos", "Avisos del archivo", mv.avisos.length, "#7C8496"]];
+  cont.innerHTML = `
+    <div class="kpi-grid">
+      ${kpiTile("En el archivo", p.activos.length, "personas activas", "#3B82F6", "📄")}
+      ${kpiTile("Sin cambios", p.sinCambios, "ya estaban al día", "#22C55E", "✅")}
+      ${kpiTile("Cambios", p.cambios.length, "turno · área · puesto · supervisor", "#F5A623", "🔁")}
+      ${kpiTile("Nuevos / reingresos", p.nuevos.length + " / " + p.reingresos.length, "altas y regresos", "#A78BFA", "➕")}
+      ${kpiTile("Bajas propuestas", p.bajas.length, `${pctBajas}% del personal activo`, p.bajas.length ? "#FF3B4E" : "#22C55E", "📤")}
+    </div>
+    ${alerta ? `<div class="banner">⚠️ Se proponen <strong>${p.bajas.length} bajas (${pctBajas}% del personal activo)</strong>. Antes de aplicar revisa que el Excel esté completo: desmarca a quien siga trabajando y se conservará como activo.</div>` : ""}
+    <div class="card">
+      <div class="pk-chips" id="mv-chips">${chips.map(([k, l, n, c]) => `<button type="button" class="pk-chip${mv.detalle === k ? " on" : ""}" data-k="${k}" style="--c:${c};"><i></i>${l} <b>${n}</b></button>`).join("")}</div>
+      <div id="mv-detalle" style="margin-top:14px;"></div>
+    </div>
+    <div class="card mv-aplicar">
+      <div class="mv-resumen">${mvTextoResumen()}</div>
+      <button class="btn-sm primary" type="button" id="mv-aplicar" ${mv.ocupado ? "disabled" : ""}>Aplicar actualización</button>
+    </div>`;
+  document.getElementById("mv-chips").addEventListener("click", (e) => { const b = e.target.closest(".pk-chip"); if(!b) return; mv.detalle = b.dataset.k;
+    document.querySelectorAll("#mv-chips .pk-chip").forEach(x => x.classList.toggle("on", x === b)); mvPintarDetalle(); });
+  document.getElementById("mv-aplicar").addEventListener("click", mvAplicar);
+  mvPintarDetalle();
+}
+
+function mvPintarDetalle(){
+  const cont = document.getElementById("mv-detalle"), p = mv.plan; if(!cont || !p) return;
+  const vacio = (t) => `<div class="feed-empty">${t}</div>`;
+  const tabla = (cab, filas) => `<div class="table-scroll" style="max-height:460px;"><table class="pk-tabla"><thead><tr>${cab.map(c => `<th>${c}</th>`).join("")}</tr></thead><tbody>${filas}</tbody></table></div>`;
+  if(mv.detalle === "cambios"){
+    const lista = p.cambios.filter(c => !mv.campo || c.campo === mv.campo).sort((a, b) => cmpNombre(a.nombre, b.nombre));
+    cont.innerHTML = `<div class="pk-controls" style="margin-bottom:10px;"><div class="pk-field"><label>Campo</label><select id="mv-campo"><option value="">Todos (${p.cambios.length})</option>
+        ${Object.entries(MV_CAMPOS).map(([k, l]) => `<option value="${k}" ${mv.campo === k ? "selected" : ""}>${l} (${p.cambios.filter(c => c.campo === k).length})</option>`).join("")}</select></div>
+        <button class="btn-sm" type="button" id="mv-cmb-todos">Aplicar todos</button><button class="btn-sm" type="button" id="mv-cmb-ninguno">No aplicar ninguno</button></div>
+        <p class="hint" style="margin:0 0 10px;">Marcado = se actualiza con lo que dice el Excel. Desmarca un cambio para <strong>conservar el dato actual</strong> (por ejemplo una corrección que hiciste a mano y que RR.HH. aún no refleja).</p>` +
+      (lista.length ? tabla(["", "DNI", "Colaborador", "Campo", "Antes (hoy)", "Ahora (Excel)"], lista.map(c => `<tr><td><input type="checkbox" class="mv-cmb" data-dni="${escHtml(c.dni)}" data-campo="${c.campo}" ${mv.cambiosOff.has(c.dni + "|" + c.campo) ? "" : "checked"}></td>
+        <td class="meta">${escHtml(c.dni)}</td><td class="pk-nombre">${escHtml(c.nombre)}</td>
+        <td><span class="mv-tipo mv-camb">${MV_CAMPOS[c.campo]}</span></td><td class="meta">${escHtml(c.antes) || "—"}</td><td style="font-weight:700;">${escHtml(c.ahora)}</td></tr>`).join("")) : vacio("No hay cambios de datos: todo el personal del archivo ya estaba al día."));
+    document.getElementById("mv-campo").addEventListener("change", (e) => { mv.campo = e.target.value; mvPintarDetalle(); });
+    const marcar = (todos) => { lista.forEach(c => { const k = c.dni + "|" + c.campo; if(todos) mv.cambiosOff.delete(k); else mv.cambiosOff.add(k); }); mvPintarDetalle(); mvActualizarResumen(); };
+    document.getElementById("mv-cmb-todos").addEventListener("click", () => marcar(true));
+    document.getElementById("mv-cmb-ninguno").addEventListener("click", () => marcar(false));
+    cont.querySelectorAll(".mv-cmb").forEach(c => c.addEventListener("change", (e) => {
+      const k = e.target.dataset.dni + "|" + e.target.dataset.campo; if(e.target.checked) mv.cambiosOff.delete(k); else mv.cambiosOff.add(k); mvActualizarResumen(); }));
+  }else if(mv.detalle === "nuevos" || mv.detalle === "reingresos"){
+    const lista = (mv.detalle === "nuevos" ? p.nuevos : p.reingresos).slice().sort((a, b) => cmpNombre(a.nombre, b.nombre));
+    cont.innerHTML = lista.length ? tabla(["DNI", "Colaborador", "Puesto", "Área · Turno", "Supervisor", "F. ingreso", ...(mv.detalle === "reingresos" ? ["Estaba cesado desde"] : [])],
+      lista.map(x => `<tr><td class="meta">${escHtml(x.dni)}</td><td class="pk-nombre">${escHtml(x.nombre)}</td><td class="meta">${escHtml(x.puesto) || "—"}</td>
+        <td class="meta">${escHtml([x.area, x.turno].filter(Boolean).join(" · ")) || "—"}</td><td class="meta">${escHtml(x.supervisor) || "—"}</td><td class="meta">${x.f_ingreso ? fmtFecha(x.f_ingreso) : "—"}</td>
+        ${mv.detalle === "reingresos" ? `<td class="meta">${x.previo.f_cese ? fmtFecha(x.previo.f_cese) : "—"} ${x.previo.motivo_cese ? "· " + escHtml(x.previo.motivo_cese) : ""}</td>` : ""}</tr>`).join(""))
+      : vacio(mv.detalle === "nuevos" ? "No hay personas nuevas." : "No hay reingresos.");
+  }else if(mv.detalle === "bajas"){
+    const limite = addDays(todayISO(), -30);
+    let lista = p.bajas.slice().sort((a, b) => cmpNombre(a.nombre, b.nombre));
+    if(mv.soloRecientes) lista = lista.filter(b => b.fecha >= limite);
+    cont.innerHTML = `<p class="hint" style="margin:0 0 10px;">Personas activas en el censo que <strong>ya no vienen en el Excel</strong>. Deja marcadas las que sí se dan de baja y elige el motivo; desmarca a quien siga trabajando (se conserva activo).</p>
+      <div class="pk-bulk" style="background:var(--panel-alt);border-color:var(--border);">
+        <button class="btn-sm" type="button" id="mv-todas">Marcar todas</button><button class="btn-sm" type="button" id="mv-ninguna">Desmarcar todas</button>
+        <label class="pk-check" style="padding:0;"><input type="checkbox" id="mv-recientes" ${mv.soloRecientes ? "checked" : ""}>Solo vistas en los últimos 30 días</label>
+        <span style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">Motivo de las ${lista.length} visibles:
+          <select id="mv-motivo-masivo">${MV_MOTIVOS.map(m => `<option>${escHtml(m)}</option>`).join("")}</select>
+          <input type="date" id="mv-fcese-masivo" title="Fecha de cese (opcional)" style="padding:6px 9px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);">
+          <button class="btn-sm primary" type="button" id="mv-motivo-aplicar">Aplicar a las visibles</button></span></div>` +
+      (lista.length ? tabla(["", "DNI", "Colaborador", "Área · Turno", "Supervisor", "Visto por última vez", "Motivo", "F. cese"],
+        lista.map(b => { const s = mv.bajas.get(b.dni) || { sel: false, motivo: MV_MOTIVO_DEFECTO };
+          const motivos = MV_MOTIVOS.includes(s.motivo) ? MV_MOTIVOS : [s.motivo, ...MV_MOTIVOS];
+          return `<tr class="${b.fecha >= limite ? "presente-sin" : ""}"><td><input type="checkbox" class="mv-sel" data-dni="${escHtml(b.dni)}" ${s.sel ? "checked" : ""}></td>
+            <td class="meta">${escHtml(b.dni)}</td><td class="pk-nombre">${escHtml(b.nombre)}</td><td class="meta">${escHtml([b.area, b.turno].filter(Boolean).join(" · ")) || "—"}</td>
+            <td class="meta">${escHtml(b.supervisor) || "—"}</td><td class="meta">${fmtFecha(b.fecha)}${b.fecha >= limite ? " · reciente" : ""}</td>
+            <td><select class="pk-sel mv-mot" data-dni="${escHtml(b.dni)}" ${s.sel ? "" : "disabled"} style="min-width:200px;">${motivos.map(m => `<option ${m === s.motivo ? "selected" : ""}>${escHtml(m)}</option>`).join("")}</select></td>
+            <td class="meta">${s.f_cese ? fmtFecha(s.f_cese) : "hoy"}</td></tr>`; }).join(""))
+        : vacio("No hay bajas propuestas: todo el personal activo viene en el archivo."));
+    const set = (dni, cambio) => { const s = mv.bajas.get(dni); if(s) Object.assign(s, cambio); };
+    document.getElementById("mv-todas")?.addEventListener("click", () => { lista.forEach(b => set(b.dni, { sel: true })); mvPintarDetalle(); mvActualizarResumen(); });
+    document.getElementById("mv-ninguna")?.addEventListener("click", () => { lista.forEach(b => set(b.dni, { sel: false })); mvPintarDetalle(); mvActualizarResumen(); });
+    document.getElementById("mv-recientes")?.addEventListener("change", (e) => { mv.soloRecientes = e.target.checked; mvPintarDetalle(); });
+    document.getElementById("mv-motivo-aplicar")?.addEventListener("click", () => {
+      const m = document.getElementById("mv-motivo-masivo").value, f = document.getElementById("mv-fcese-masivo").value || null;
+      lista.forEach(b => { if(mv.bajas.get(b.dni)?.sel) set(b.dni, { motivo: m, ...(f ? { f_cese: f } : {}) }); }); mvPintarDetalle(); toast("Motivo aplicado a las marcadas"); });
+    cont.querySelectorAll(".mv-sel").forEach(c => c.addEventListener("change", (e) => {
+      set(e.target.dataset.dni, { sel: e.target.checked });
+      const fila = e.target.closest("tr"); if(fila) fila.querySelector(".mv-mot").disabled = !e.target.checked;
+      mvActualizarResumen(); }));
+    cont.querySelectorAll(".mv-mot").forEach(s => s.addEventListener("change", (e) => set(e.target.dataset.dni, { motivo: e.target.value })));
+  }else{
+    cont.innerHTML = mv.avisos.length ? `<ul class="cfg-lista">${mv.avisos.slice(0, 80).map(a => `<li>${escHtml(a)}</li>`).join("")}${mv.avisos.length > 80 ? `<li>… y ${mv.avisos.length - 80} más.</li>` : ""}</ul>`
+      : vacio("El archivo no tiene avisos.");
+  }
+}
+// Texto de "qué se va a escribir": se recalcula al marcar o desmarcar bajas sin reconstruir la lista.
+function mvTextoResumen(){
+  const p = mv.plan; if(!p) return "";
+  const nBajasSel = [...mv.bajas.values()].filter(b => b.sel).length;
+  return `Se escribirá el censo del <b>${fmtFecha(mv.fecha)}</b>: <b>${p.activos.length}</b> activos · <b>${p.nuevos.length}</b> altas · <b>${p.reingresos.length}</b> reingresos · <b>${mvCambiosAplicar()}</b> cambios${mvCambiosAplicar() < p.cambios.length ? ` (<b>${p.cambios.length - mvCambiosAplicar()}</b> sin aplicar)` : ""} ·
+    <b style="color:var(--red);">${nBajasSel}</b> bajas${p.bajas.length - nBajasSel ? ` · <b>${p.bajas.length - nBajasSel}</b> se conservan activos` : ""}.`;
+}
+function mvActualizarResumen(){ const r = document.querySelector("#mv-preview .mv-resumen"); if(r) r.innerHTML = mvTextoResumen(); }
+
+async function mvAplicar(){
+  const p = mv.plan; if(!p || mv.ocupado) return;
+  const bajas = p.bajas.filter(b => mv.bajas.get(b.dni)?.sel).map(b => { const s = mv.bajas.get(b.dni); return { dni: b.dni, motivo: s.motivo, f_cese: s.f_cese || null }; });
+  const mantener = p.bajas.filter(b => !mv.bajas.get(b.dni)?.sel).map(b => b.dni);
+  const msg = `Se va a escribir el censo del ${fmtFecha(mv.fecha)}:\n\n• ${p.activos.length} personas activas\n• ${p.nuevos.length} altas y ${p.reingresos.length} reingresos\n• ${mvCambiosAplicar()} cambios de turno/área/puesto/supervisor${mv.cambiosOff.size ? ` (${mv.cambiosOff.size} sin aplicar)` : ""}\n• ${bajas.length} BAJAS (pasan a cesado)${mantener.length ? `\n• ${mantener.length} se conservan activos` : ""}\n\n¿Aplicar?`;
+  if(!confirm(msg)) return;
+  mv.ocupado = true; const btn = document.getElementById("mv-aplicar"); if(btn){ btn.disabled = true; btn.textContent = "Aplicando…"; }
+  try{
+    const r = await rpc("asis_importar_aplicar", { p_fecha: mv.fecha, p_archivo: mv.archivo,
+      // Los cambios que el usuario NO quiso aplicar viajan con el dato actual, así el servidor no ve diferencia y no los toca.
+      p_activos: p.activos.map(a => { const o = { dni: a.clave, nombre: a.nombre, area: a.area, puesto: a.puesto, turno: a.turno, supervisor: a.supervisor, f_ingreso: a.f_ingreso };
+        const actual = mv.roster.find(r => r.dni === a.clave);
+        if(actual) Object.keys(MV_CAMPOS).forEach(c => { if(mv.cambiosOff.has(a.clave + "|" + c)) o[c] = actual[c]; });
+        return o; }),
+      p_bajas: bajas, p_mantener: mantener });
+    mv.resultado = r; mv.plan = null; pk.hist = null; pk.areasCfg = null;   // el censo cambió: Picking vuelve a leer
+    toast("Actualización aplicada");
+  }catch(e){ toast("No se pudo aplicar: " + mvErr(e), true); }
+  finally{ mv.ocupado = false; mvPintarPreview(); }
+}
+
+/* ---------- Historial ---------- */
+const MV_TIPO_INFO = { ALTA: ["Alta", "#22C55E"], BAJA: ["Baja", "#FF3B4E"], REINGRESO: ["Reingreso", "#3B82F6"], CAMBIO: ["Cambio", "#F5A623"] };
+function mvFiltrados(){
+  const q = mv.q.toLowerCase().trim();
+  return mv.rows.filter(r => {
+    if(mv.tipo === "ALTA" || mv.tipo === "BAJA" || mv.tipo === "REINGRESO"){ if(r.tipo !== mv.tipo) return false; }
+    else if(mv.tipo){ if(r.tipo !== "CAMBIO" || r.campo !== mv.tipo) return false; }
+    return !q || [r.nombre, r.dni, r.motivo, r.usuario, r.valor_anterior, r.valor_nuevo].some(v => (v || "").toLowerCase().includes(q));
+  }).sort((a, b) => b.fecha.localeCompare(a.fecha) || cmpNombre(a.nombre, b.nombre));
+}
+const mvEtiquetaTipo = (r) => r.tipo === "CAMBIO" ? "Cambio de " + (MV_CAMPOS[r.campo] || r.campo || "").toLowerCase() : (MV_TIPO_INFO[r.tipo] || [r.tipo])[0];
+function mvPintarHistorial(){
+  const tabla = document.getElementById("mv-tabla"); if(!tabla) return;
+  const todas = mv.rows, lista = mvFiltrados();
+  const cuenta = (f) => todas.filter(f).length;
+  document.getElementById("mv-kpis").innerHTML =
+    kpiTile("Altas", cuenta(r => r.tipo === "ALTA"), "ingresos nuevos", "#22C55E", "➕") +
+    kpiTile("Bajas", cuenta(r => r.tipo === "BAJA"), "ceses y renuncias", "#FF3B4E", "📤") +
+    kpiTile("Reingresos", cuenta(r => r.tipo === "REINGRESO"), "regresaron", "#3B82F6", "↩️") +
+    kpiTile("Cambios de turno", cuenta(r => r.tipo === "CAMBIO" && r.campo === "turno"), "rotación de turno", "#F5A623", "🌓") +
+    kpiTile("Cambios de área", cuenta(r => r.tipo === "CAMBIO" && r.campo === "area"), "rotación de área", "#A78BFA", "🔀") +
+    kpiTile("Otros cambios", cuenta(r => r.tipo === "CAMBIO" && (r.campo === "puesto" || r.campo === "supervisor")), "puesto o supervisor", "#7C8496", "✏️");
+  document.getElementById("mv-h-hint").textContent = `${lista.length} de ${todas.length} movimientos entre ${fmtFecha(mv.desde)} y ${fmtFecha(mv.hasta)}.`;
+  tabla.innerHTML = !lista.length ? `<div class="feed-empty">${todas.length ? "Sin resultados con estos filtros." : "Todavía no hay movimientos registrados en este rango. Se generan al cargar un Excel o al editar personal."}</div>` :
+    `<table class="pk-tabla"><thead><tr><th>Fecha</th><th>DNI</th><th>Colaborador</th><th>Movimiento</th><th>Detalle</th><th>Motivo</th><th>Registrado por</th></tr></thead><tbody>${lista.map(r => {
+      const c = (MV_TIPO_INFO[r.tipo] || ["", "#7C8496"])[1];
+      const detalle = r.tipo === "CAMBIO" ? `${escHtml(r.valor_anterior) || "—"} <span class="hora-pendiente">→</span> <b>${escHtml(r.valor_nuevo) || "—"}</b>`
+        : r.tipo === "ALTA" ? escHtml(r.valor_nuevo) || "—" : r.tipo === "BAJA" ? escHtml(r.valor_anterior) || "—" : `${escHtml(r.valor_anterior) || "—"} <span class="hora-pendiente">→</span> <b>${escHtml(r.valor_nuevo) || "—"}</b>`;
+      return `<tr><td class="meta">${fmtFecha(r.fecha)}</td><td class="meta">${escHtml(r.dni)}</td><td class="pk-nombre">${avatarHtml(r.nombre)}<span>${escHtml(r.nombre) || "—"}</span></td>
+        <td><span class="mv-tipo" style="background:${c}22;color:${c};">${escHtml(mvEtiquetaTipo(r))}</span></td><td>${detalle}</td><td class="meta">${escHtml(r.motivo) || "—"}</td><td class="meta">${escHtml(r.usuario) || "—"}</td></tr>`; }).join("")}</tbody></table>`;
+  const imps = document.getElementById("mv-imps");
+  imps.innerHTML = !mv.imps.length ? `<div class="feed-empty">Todavía no se ha cargado ningún Excel.</div>` :
+    `<table><thead><tr><th>Cuándo</th><th>Censo del</th><th>Archivo</th><th>Usuario</th><th class="num">Activos</th><th class="num">Altas</th><th class="num">Reingresos</th><th class="num">Cambios</th><th class="num">Bajas</th></tr></thead><tbody>${mv.imps.map(i =>
+      `<tr><td class="meta">${new Date(i.creado).toLocaleString("es-PE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false })}</td><td class="meta">${fmtFecha(i.fecha)}</td><td>${escHtml(i.archivo) || "—"}</td>
+       <td class="meta">${escHtml(i.usuario) || "—"}</td><td class="num">${i.activos}</td><td class="num">${i.nuevos}</td><td class="num">${i.reingresos}</td><td class="num">${i.cambios}</td><td class="num" style="${i.bajas ? "color:var(--red);font-weight:800;" : ""}">${i.bajas}</td></tr>`).join("")}</tbody></table>`;
+}
+function mvExportarHistorial(){
+  const lista = mvFiltrados();
+  if(!lista.length){ toast("No hay movimientos para exportar.", true); return; }
+  const ws = XLSX.utils.json_to_sheet(lista.map(r => ({ Fecha: r.fecha, DNI: r.dni, Colaborador: r.nombre, Movimiento: mvEtiquetaTipo(r), Antes: r.valor_anterior || "", Ahora: r.valor_nuevo || "", Motivo: r.motivo || "", "Registrado por": r.usuario || "" })));
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Movimientos");
+  XLSX.writeFile(wb, `movimientos_${mv.desde}_a_${mv.hasta}.xlsx`);
+}
+
 /* ================= Arranque ================= */
 async function iniciarApp(){
   document.getElementById("login-screen").style.display = "none";
@@ -2890,6 +3327,7 @@ async function iniciarApp(){
   document.getElementById("user-nombre").textContent = session.nombre || session.username || "—";
   document.getElementById("user-rol").textContent = ROLE_LABELS[session.rol] || session.rol || "—";
   document.getElementById("tab-config").hidden = !PK_ROLES_CONFIG.includes(session.rol);
+  document.getElementById("tab-movimientos").hidden = !MV_ROLES_VER.includes(session.rol);
   await Promise.all([cargarAreas(), cargarZonas()]);
   renderTabActivo();
 }
