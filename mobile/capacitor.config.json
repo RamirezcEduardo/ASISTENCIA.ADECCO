@@ -1,6 +1,6 @@
 {
   "appId": "com.adecco.asistencia",
-  "appName": "ADECCO Asistencia",
+  "appName": "Control de Asistencia",
   "webDir": "www",
   "bundledWebRuntime": false,
   "server": {

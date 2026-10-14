@@ -1,0 +1,28 @@
+/* Tokens y piezas de marca compartidas por todas las pantallas.
+   Los valores de --ac-* los escribe marca.js a partir de marca.config.js; los de respaldo son la marca por defecto. */
+:root{
+  --accent:var(--ac-l,#4F46E5);
+  --accent-strong:var(--ac-strong-l,#4139BC);
+  --accent-tint:var(--ac-tint-l,#EFEEFD);
+  --accent-dim:var(--ac-dim-l,#DFDEFA);
+  --accent-text:var(--ac-text-l,#4F46E5);
+  --accent-ink:var(--ac-ink-l,#FFFFFF);
+  --accent-ring:var(--ac-ring-l,rgba(79,70,229,.22));
+}
+:root[data-theme="dark"]{
+  --accent:var(--ac-d,#9590EF);
+  --accent-strong:var(--ac-strong-d,#ABA7F2);
+  --accent-tint:var(--ac-tint-d,#27293E);
+  --accent-dim:var(--ac-dim-d,#373757);
+  --accent-text:var(--ac-text-d,#9590EF);
+  --accent-ink:var(--ac-ink-d,#111827);
+  --accent-ring:var(--ac-ring-d,rgba(149,144,239,.30));
+}
+[hidden]{display:none!important;}
+
+/* Logo: marca genérica (SVG en línea) o la imagen del cliente. El tamaño lo da el contenedor con --logo-size. */
+.marca-logo{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;height:var(--logo-size,32px);min-width:var(--logo-size,32px);}
+.marca-logo svg{height:100%;width:auto;aspect-ratio:1;display:block;}
+.marca-logo .lg-bg{fill:var(--logo-bg,var(--accent));}
+.marca-logo .lg-fg{stroke:var(--logo-fg,var(--accent-ink));}
+.marca-logo.con-imagen img{height:100%;width:auto;max-width:calc(var(--logo-size,32px) * 4);object-fit:contain;display:block;}

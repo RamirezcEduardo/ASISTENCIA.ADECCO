@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-modulo="Marcación de asistencia">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>ADECCO · Control de Asistencia</title>
+<title>Marcación de asistencia</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<meta name="theme-color" content="#E31E24">
+<meta name="theme-color" content="#4F46E5" data-marca>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Asistencia">
@@ -21,6 +21,10 @@
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- Identidad de la instalacion (nombre, color, logo): se edita solo marca.config.js -->
+<link rel="stylesheet" href="marca.css">
+<script src="marca.config.js"></script>
+<script src="marca.js"></script>
 <style>
   :root{
     --bg:#F3F4F6;
@@ -29,9 +33,9 @@
     --border:#E5E7EB;
     --text:#1A1D23;
     --muted:#8B92A0;
-    --red:#E31E24;
-    --red-dark:#B9151A;
-    --red-tint:#FDECEC;
+    --red:#DC2626;
+    --red-dark:#B91C1C;
+    --red-tint:#FEECEC;
     --green:#16A34A;
     --green-tint:#E9F9EF;
     --orange:#F59E0B;
@@ -42,7 +46,7 @@
     --purple-tint:#F3ECFE;
     --text-soft:#4B5563;
     --border-strong:#C7CBD1;
-    --login-gradient:linear-gradient(135deg,#EEF2FB 0%,#F6F3F8 50%,#FBEFF1 100%);
+    --login-gradient:linear-gradient(135deg,var(--accent-tint) 0%,var(--bg) 62%);
     --shadow:0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06);
   }
   :root[data-theme="dark"]{
@@ -52,8 +56,8 @@
     --border:#2C313B;
     --text:#E8EAED;
     --muted:#8B92A0;
-    --red:#FF5A5F;
-    --red-dark:#E31E24;
+    --red:#F87171;
+    --red-dark:#EF4444;
     --red-tint:#3A1418;
     --green:#22C55E;
     --green-tint:#0F2A1A;
@@ -65,7 +69,7 @@
     --purple-tint:#251C3D;
     --text-soft:#C1C7D0;
     --border-strong:#3A404C;
-    --login-gradient:linear-gradient(135deg,#181A22 0%,#1E1A22 50%,#241A1D 100%);
+    --login-gradient:linear-gradient(135deg,var(--accent-tint) 0%,#14161C 62%);
     --shadow:0 1px 2px rgba(0,0,0,.3), 0 1px 3px rgba(0,0,0,.35);
   }
   *{box-sizing:border-box;}
@@ -75,12 +79,12 @@
     -webkit-font-smoothing:antialiased;transition:background .15s ease,color .15s ease;
     overscroll-behavior:none;-webkit-tap-highlight-color:transparent;
   }
-  ::selection{background:var(--red);color:#fff;}
+  ::selection{background:var(--accent);color:var(--accent-ink);}
   button{font-family:inherit;touch-action:manipulation;}
   input{font-family:inherit;}
   [hidden]{display:none!important;}
 
-  .topbar-red{height:5px;background:var(--red);flex-shrink:0;}
+  .topbar-brand{height:5px;background:var(--accent);flex-shrink:0;}
 
   .theme-toggle{
     display:flex;align-items:center;justify-content:center;
@@ -100,7 +104,7 @@
   }
   .kiosk-head{width:100%;max-width:640px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;}
   .kiosk-brand{display:flex;align-items:center;gap:12px;}
-  .kiosk-brand-bar{width:4px;align-self:stretch;border-radius:2px;background:var(--red);min-height:34px;}
+  .kiosk-brand .marca-logo{--logo-size:40px;}
   .kiosk-brand h1{font-size:clamp(16px,2.4vw,20px);margin:0;font-weight:800;letter-spacing:-.01em;}
   .kiosk-brand p{margin:2px 0 0;font-size:clamp(12px,1.6vw,14px);color:var(--muted);}
   .kiosk-clock{font-family:'IBM Plex Mono',monospace;font-size:clamp(14px,2vw,18px);color:var(--text-soft);text-align:right;}
@@ -117,15 +121,15 @@
     text-align:center;padding:clamp(14px,2.2vh,20px) 16px;border-radius:14px;border:1.5px solid var(--border);
     background:var(--panel-alt);color:var(--text);min-width:0;
   }
-  .dni-form input:focus{outline:none;border-color:var(--red);}
+  .dni-form input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-ring);}
   .btn{
     border:none;border-radius:12px;cursor:pointer;font-weight:700;font-size:15px;
     padding:14px 20px;transition:transform .08s ease, opacity .15s ease;touch-action:manipulation;user-select:none;
   }
   .btn:active{transform:scale(.97);}
   .btn:disabled{opacity:.5;cursor:not-allowed;}
-  .btn-primary{background:var(--red);color:#fff;}
-  .btn-primary:hover:not(:disabled){background:var(--red-dark);}
+  .btn-primary{background:var(--accent);color:var(--accent-ink);}
+  .btn-primary:hover:not(:disabled){background:var(--accent-strong);}
   .btn-ghost{background:var(--panel-alt);color:var(--text);border:1px solid var(--border);}
   .btn-ghost:hover:not(:disabled){border-color:var(--border-strong);}
 
@@ -140,8 +144,8 @@
   }
   .keypad-key:active{transform:scale(.95);background:var(--border);}
   .keypad-key.key-clear{color:var(--red-dark);font-size:clamp(15px,2.2vw,18px);}
-  .keypad-key.key-go{background:var(--red);color:#fff;border-color:var(--red);font-size:clamp(22px,3.5vw,28px);}
-  .keypad-key.key-go:active{background:var(--red-dark);}
+  .keypad-key.key-go{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-size:clamp(22px,3.5vw,28px);}
+  .keypad-key.key-go:active{background:var(--accent-strong);}
 
   .employee-card{display:none;width:100%;}
   .employee-card.show{display:block;}
@@ -156,7 +160,7 @@
     display:flex;align-items:center;justify-content:center;margin:0 auto 6px;font-size:clamp(13px,2vw,16px);color:var(--muted);
   }
   .timeline-step.done .timeline-dot{background:var(--green-tint);border-color:var(--green);color:var(--green);}
-  .timeline-step.next .timeline-dot{border-color:var(--red);color:var(--red);}
+  .timeline-step.next .timeline-dot{border-color:var(--accent);color:var(--accent-text);}
   .timeline-label{font-size:clamp(9.5px,1.3vw,11.5px);color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.02em;}
   .timeline-time{font-size:clamp(9.5px,1.3vw,11.5px);color:var(--green);font-family:'IBM Plex Mono',monospace;margin-top:1px;}
 
@@ -169,7 +173,7 @@
   .punch-btn .ico{font-size:clamp(24px,4vw,32px);}
   .punch-btn:hover:not(:disabled){border-color:var(--border-strong);}
   .punch-btn:disabled{opacity:.4;cursor:not-allowed;}
-  .punch-btn.suggest{border-color:var(--red);background:var(--red-tint);color:var(--red-dark);}
+  .punch-btn.suggest{border-color:var(--accent);background:var(--accent-tint);color:var(--accent-text);}
   .punch-btn.done{border-color:var(--green);background:var(--green-tint);color:var(--green);}
 
   .feedback{display:none;text-align:center;padding:clamp(16px,4vh,40px) 10px;width:100%;}
@@ -245,7 +249,7 @@
     width:100%;padding:11px 13px;border-radius:10px;border:1.5px solid var(--border);
     background:var(--panel-alt);color:var(--text);font-size:14.5px;
   }
-  .field input:focus{outline:none;border-color:var(--red);}
+  .field input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-ring);}
   .login-back{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;margin-bottom:14px;padding:0;}
   .login-back:hover{color:var(--text-soft);}
 
@@ -255,7 +259,7 @@
   header.top{background:var(--panel);border-bottom:1px solid var(--border);padding:16px 24px;}
   .header-row{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;}
   .header-left{display:flex;gap:12px;align-items:center;}
-  .header-bar{width:4px;border-radius:2px;background:var(--red);align-self:stretch;}
+  .header-bar{width:4px;border-radius:2px;background:var(--accent);align-self:stretch;}
   .header-left h1{margin:0;font-size:16px;font-weight:800;}
   .header-left p{margin:1px 0 0;font-size:12px;color:var(--muted);}
   .header-right{display:flex;gap:10px;align-items:center;}
@@ -286,7 +290,7 @@
   tbody tr:last-child td{border-bottom:none;}
   tbody tr:hover{background:var(--panel-alt);}
   .cell-time{font-family:'IBM Plex Mono',monospace;cursor:pointer;border-radius:6px;padding:3px 6px;}
-  .cell-time:hover{background:var(--red-tint);color:var(--red-dark);}
+  .cell-time:hover{background:var(--accent-tint);color:var(--accent-text);}
   .cell-empty{color:var(--border-strong);}
   .badge-ok{color:var(--green);font-weight:700;}
   .badge-bad{color:var(--orange);font-weight:700;}
@@ -303,13 +307,13 @@
 <body>
 
 <div id="kiosk">
-  <div class="topbar-red"></div>
+  <div class="topbar-brand"></div>
   <div class="kiosk-inner">
   <div class="kiosk-head">
     <div class="kiosk-brand">
-      <div class="kiosk-brand-bar"></div>
+      <span data-marca-logo></span>
       <div>
-        <h1>ADECCO · Control de Asistencia</h1>
+        <h1 data-marca="producto"></h1>
         <p>Ingresa tu DNI para marcar</p>
       </div>
     </div>
@@ -405,7 +409,7 @@
     <div class="login-top">
       <div>
         <h2>Panel administrativo</h2>
-        <p class="sub">Usa tu cuenta de Adecco KPI / SSOMA</p>
+        <p class="sub">Usa tu cuenta de la plataforma</p>
       </div>
       <button class="theme-toggle" id="theme-toggle-login" title="Cambiar tema">🌙</button>
     </div>
@@ -431,7 +435,7 @@
       <div class="header-left">
         <div class="header-bar"></div>
         <div>
-          <h1>Control de Asistencia</h1>
+          <h1 data-marca="producto"></h1>
           <p>Panel administrativo</p>
         </div>
       </div>

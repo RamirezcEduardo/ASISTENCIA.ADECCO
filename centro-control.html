@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-modulo="Centro de Control">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ADECCO · Centro de Control de Asistencia</title>
+<title>Centro de Control</title>
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
-<meta name="theme-color" content="#F3F4F6" id="meta-theme-color">
+<meta name="theme-color" content="#F5F6FA" id="meta-theme-color">
 <script>
-  /* Blanco/rojo Adecco es el tema por defecto; modo noche es una eleccion
+  /* El tema claro es el de por defecto; modo noche es una eleccion
      explicita que se recuerda. Se aplica antes del <style> para que no
      "parpadee" el tema oscuro al cargar si el usuario ya lo eligio antes. */
   try{
@@ -16,115 +16,151 @@
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- Identidad de la instalacion (nombre, color, logo): se edita solo marca.config.js -->
+<link rel="stylesheet" href="marca.css">
+<script src="marca.config.js"></script>
+<script src="marca.js"></script>
 <style>
   :root{
-    /* Blanco y rojo Adecco -- tema por defecto. */
-    --bg:#F3F4F6; --panel:#FFFFFF; --panel-alt:#F5F6F8; --border:#E5E7EB; --border-soft:#EEF0F3;
-    --text:#1A1D23; --muted:#8B92A0; --text-soft:#4B5563;
-    --red:#E31E24; --red-dim:#FDECEC; --red-tint:#FDECEC;
-    --green:#16A34A; --green-dim:#E9F9EF; --amber:#C97A05; --amber-dim:#FEF3E2;
+    /* Superficies y texto neutros. El color de marca (--accent*) lo calcula marca.js desde marca.config.js (ver marca.css).
+       --red es solo semantico: falta, tardanza, error. */
+    --bg:#F5F6FA; --panel:#FFFFFF; --panel-alt:#F7F8FB; --border:#E4E7EE; --border-soft:#EDEFF4;
+    --text:#161A23; --muted:#7A8294; --text-soft:#4A5366;
+    --red:#DC2626; --red-dim:#FCD5D5; --red-tint:#FEECEC;
+    --green:#16A34A; --green-dim:#E7F8EE; --amber:#C97A05; --amber-dim:#FEF3E2;
     --blue:#2563EB; --blue-dim:#EAF1FE; --purple:#7C3AED; --purple-dim:#F3ECFE; --cyan:#0E7490;
     --mono:'IBM Plex Mono',monospace;
-    --shadow:0 4px 20px rgba(16,24,40,.08);
+    --radius:12px;
+    --shadow-sm:0 1px 2px rgba(16,24,40,.05);
+    --shadow:0 8px 28px rgba(16,24,40,.12);
+    --side-w:248px;
   }
   /* Modo noche -- eleccion explicita del usuario (boton en el header). */
   :root[data-theme="dark"]{
     --bg:#0B0D12; --panel:#12151C; --panel-alt:#171B24; --border:#232733; --border-soft:#1B1F29;
     --text:#E7EAF0; --muted:#7C8496; --text-soft:#AEB4C2;
-    --red:#FF3B4E; --red-dim:#4A1620; --red-tint:#2A121A;
+    --red:#F87171; --red-dim:#4A1620; --red-tint:#2A121A;
     --green:#22C55E; --green-dim:#0F2A1C; --amber:#F5A623; --amber-dim:#332508;
     --blue:#3B82F6; --blue-dim:#0F1F3A; --purple:#A78BFA; --purple-dim:#241B3A; --cyan:#22D3EE;
-    --shadow:0 4px 24px rgba(0,0,0,.4);
+    --shadow-sm:0 1px 2px rgba(0,0,0,.35);
+    --shadow:0 8px 28px rgba(0,0,0,.5);
   }
   body{transition:background .15s ease,color .15s ease;}
   *{box-sizing:border-box;}
   html,body{height:100%;}
   body{
     margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;
-    -webkit-font-smoothing:antialiased;
+    -webkit-font-smoothing:antialiased;font-size:14px;
   }
   button, input, select{font-family:inherit;}
   [hidden]{display:none!important;}
+  ::selection{background:var(--accent);color:var(--accent-ink);}
   ::-webkit-scrollbar{width:10px;height:10px;}
   ::-webkit-scrollbar-thumb{background:var(--border);border-radius:6px;}
   ::-webkit-scrollbar-track{background:transparent;}
+  input:focus,select:focus,button:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-ring);}
+  svg.ic{width:18px;height:18px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
 
   /* ============ Login ============ */
-  #login-screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
-    background:radial-gradient(circle at 30% 20%, #FDECEC 0%, #F3F4F6 55%);z-index:50;}
-  :root[data-theme="dark"] #login-screen{background:radial-gradient(circle at 30% 20%, #1a1030 0%, #0B0D12 55%);}
-  .login-card{width:min(90vw,380px);background:var(--panel);border:1px solid var(--border);border-radius:18px;
-    padding:32px 28px;box-shadow:var(--shadow);}
-  .login-card .logo-row{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
-  .login-card .logo-row img{width:36px;height:36px;}
-  .login-card .logo-row b{font-size:19px;color:var(--red);letter-spacing:.02em;}
-  .login-card h2{margin:2px 0 22px;font-size:14px;color:var(--muted);font-weight:600;}
-  .login-card label{display:block;font-size:11.5px;color:var(--muted);margin:14px 0 5px;text-transform:uppercase;letter-spacing:.04em;}
-  .login-card input{width:100%;padding:11px 13px;border-radius:9px;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font-size:14.5px;}
-  .login-card input:focus{outline:none;border-color:var(--red);}
-  .login-card button{width:100%;margin-top:22px;padding:12px;border:none;border-radius:9px;background:var(--red);
-    color:#fff;font-weight:700;font-size:14.5px;cursor:pointer;}
-  .login-card button:disabled{opacity:.5;}
-  .login-error{margin-top:12px;font-size:12.5px;color:var(--red);display:none;}
+  #login-screen{position:fixed;inset:0;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);background:var(--panel);z-index:50;}
+  .login-hero{position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between;gap:32px;padding:44px 56px;
+    color:var(--ac-ink-l,#fff);
+    background:radial-gradient(900px 520px at 0% 0%,rgba(255,255,255,.20),transparent 60%),radial-gradient(700px 500px at 100% 100%,rgba(0,0,0,.18),transparent 60%),
+      linear-gradient(150deg,var(--ac-l,#4F46E5) 0%,var(--ac-strong-l,#4139BC) 100%);}
+  .hero-brand{display:flex;align-items:center;gap:12px;font-size:17px;font-weight:800;letter-spacing:-.01em;--logo-size:38px;--logo-bg:rgba(255,255,255,.2);--logo-fg:#fff;}
+  .hero-body h2{margin:0 0 22px;font-size:clamp(26px,3vw,38px);line-height:1.18;font-weight:800;letter-spacing:-.025em;max-width:460px;}
+  .hero-list{list-style:none;margin:0;padding:0;display:grid;gap:12px;font-size:14.5px;opacity:.92;}
+  .hero-list li{display:flex;align-items:center;gap:11px;}
+  .hero-list li::before{content:"";width:20px;height:20px;border-radius:50%;flex-shrink:0;background:rgba(255,255,255,.2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 12.5 4 4 8-9'/%3E%3C/svg%3E") center/12px no-repeat;}
+  .hero-foot{font-size:12.5px;opacity:.75;}
+  .login-panel{display:flex;align-items:center;justify-content:center;padding:32px 20px;background:var(--panel);overflow:auto;}
+  .login-card{width:min(100%,360px);}
+  .login-brand-mobile{display:none;align-items:center;gap:11px;margin-bottom:26px;font-size:17px;font-weight:800;--logo-size:34px;}
+  .login-card h1{margin:0 0 6px;font-size:24px;font-weight:800;letter-spacing:-.02em;}
+  .login-card .login-sub{margin:0 0 24px;font-size:13.5px;color:var(--muted);}
+  .login-card label{display:block;font-size:12.5px;font-weight:600;color:var(--text-soft);margin:16px 0 6px;}
+  .login-card input{width:100%;padding:11px 13px;border-radius:10px;border:1px solid var(--border);background:var(--panel);color:var(--text);font-size:14.5px;}
+  .login-card input:focus{border-color:var(--accent);}
+  .login-card button{width:100%;margin-top:24px;padding:12px;border:none;border-radius:10px;background:var(--accent);
+    color:var(--accent-ink);font-weight:700;font-size:14.5px;cursor:pointer;box-shadow:var(--shadow-sm);}
+  .login-card button:hover:not(:disabled){background:var(--accent-strong);}
+  .login-card button:disabled{opacity:.55;}
+  .login-error{margin-top:14px;font-size:12.5px;color:var(--red);background:var(--red-tint);border-radius:9px;padding:9px 12px;display:none;}
   .login-error.show{display:block;}
+  @media (max-width:900px){
+    #login-screen{grid-template-columns:minmax(0,1fr);}
+    .login-hero{display:none;}
+    .login-brand-mobile{display:flex;}
+  }
 
-  /* ============ Shell ============ */
-  #app{display:none;height:100vh;flex-direction:column;}
-  #app.show{display:flex;}
+  /* ============ Shell: menu lateral + contenido ============ */
+  #app{display:none;height:100vh;}
+  #app.show{display:grid;grid-template-columns:var(--side-w) minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr);
+    grid-template-areas:"side head" "side filter" "side main";}
 
-  header{display:flex;align-items:center;gap:14px;padding:12px 20px;border-bottom:1px solid var(--border);
-    background:var(--panel);flex-shrink:0;}
-  :root[data-theme="dark"] header{background:linear-gradient(180deg,#12151C,#0F1218);}
-  header .logo-row{display:flex;align-items:center;gap:9px;}
-  header img{width:28px;height:28px;}
-  header b.brand{font-size:15.5px;color:var(--red);letter-spacing:.02em;}
-  header .subtitle{font-size:11px;color:var(--muted);}
+  header{grid-area:head;display:flex;align-items:center;gap:14px;padding:0 28px;height:64px;border-bottom:1px solid var(--border);background:var(--panel);min-width:0;}
+  header .head-brand{display:none;align-items:center;gap:9px;font-size:15px;font-weight:800;--logo-size:28px;min-width:0;}
+  header .titulo{display:flex;flex-direction:column;min-width:0;}
+  header .titulo h1{margin:0;font-size:19px;font-weight:800;letter-spacing:-.02em;line-height:1.2;white-space:nowrap;}
   .live-pulse{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(34,197,94,.6);
     animation:pulse 1.8s infinite;flex-shrink:0;}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.55);}70%{box-shadow:0 0 0 8px rgba(34,197,94,0);}100%{box-shadow:0 0 0 0 rgba(34,197,94,0);}}
-  header .clock{font-family:var(--mono);font-size:13.5px;color:var(--text-soft);}
+  header .clock{font-family:var(--mono);font-size:13px;color:var(--text-soft);background:var(--panel-alt);border:1px solid var(--border);border-radius:8px;padding:5px 10px;}
   header .spacer{flex:1;}
-  header .user-chip{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-soft);}
-  header .user-chip .role{background:var(--panel-alt);border:1px solid var(--border);border-radius:999px;padding:3px 10px;font-size:11px;color:var(--muted);}
-  header .logout-btn{background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer;}
-  header .logout-btn:hover{color:var(--text);border-color:var(--border-soft);}
-  .theme-toggle{background:var(--panel-alt);border:1px solid var(--border);color:var(--text);border-radius:8px;
-    width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:15px;cursor:pointer;flex-shrink:0;}
-  .theme-toggle:hover{border-color:var(--red);}
+  header .user-chip{display:flex;align-items:center;gap:10px;min-width:0;}
+  header .user-av{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+    background:var(--accent-tint);color:var(--accent-text);font-size:12.5px;font-weight:800;}
+  header .user-txt{display:flex;flex-direction:column;min-width:0;line-height:1.25;}
+  header .user-txt #user-nombre{font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px;}
+  header .user-chip .role{font-size:11.5px;color:var(--muted);}
+  header .logout-btn{display:inline-flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--border);color:var(--text-soft);border-radius:9px;
+    padding:7px 12px;font-size:12.5px;font-weight:600;cursor:pointer;}
+  header .logout-btn:hover{color:var(--text);border-color:var(--muted);}
+  header .logout-btn .ic{width:16px;height:16px;}
+  .theme-toggle{background:var(--panel);border:1px solid var(--border);color:var(--text-soft);border-radius:9px;
+    width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;}
+  .theme-toggle:hover{color:var(--text);border-color:var(--muted);}
 
-  nav#tabs{display:flex;gap:4px;padding:10px 20px 0;border-bottom:1px solid var(--border);background:var(--bg);flex-shrink:0;overflow-x:auto;}
-  nav#tabs button{background:none;border:none;color:var(--muted);font-size:13px;font-weight:700;padding:10px 16px;
-    border-radius:10px 10px 0 0;cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;}
-  nav#tabs button.active{color:var(--text);background:var(--panel);border-bottom:2px solid var(--red);}
-  nav#tabs button:hover:not(.active){color:var(--text-soft);}
+  nav#tabs{grid-area:side;display:flex;flex-direction:column;gap:2px;padding:16px 12px;background:var(--panel);border-right:1px solid var(--border);overflow-y:auto;min-width:0;}
+  .side-brand{display:flex;align-items:center;gap:11px;padding:4px 8px 14px;--logo-size:36px;min-width:0;}
+  .side-brand .nombre{display:flex;flex-direction:column;min-width:0;line-height:1.25;}
+  .side-brand b{font-size:15px;font-weight:800;letter-spacing:-.015em;color:var(--text);}
+  .side-brand small{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .nav-grupo{font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);padding:16px 10px 6px;}
+  nav#tabs button{display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:none;border:none;color:var(--text-soft);
+    font-size:13.5px;font-weight:600;padding:9px 11px;border-radius:9px;cursor:pointer;white-space:nowrap;}
+  nav#tabs button .ic{color:var(--muted);}
+  nav#tabs button:hover:not(.active){background:var(--panel-alt);color:var(--text);}
+  nav#tabs button.active{background:var(--accent-tint);color:var(--accent-text);}
+  nav#tabs button.active .ic{color:var(--accent);}
 
-  #filter-bar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 20px;border-bottom:1px solid var(--border);
-    background:var(--panel);flex-shrink:0;}
+  #filter-bar{grid-area:filter;display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:16px 28px 0;background:var(--bg);min-width:0;}
   #filter-fechas{display:contents;}
   #filter-fechas.oculto{display:none;}
-  #filter-bar label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin-right:4px;}
-  #filter-bar input, #filter-bar select{background:var(--panel-alt);border:1px solid var(--border);color:var(--text);
-    border-radius:8px;padding:7px 10px;font-size:12.5px;}
-  #filter-bar button{background:var(--red);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;}
-  #filter-bar #f-limpiar{background:var(--panel-alt);color:var(--text-soft);border:1px solid var(--border);font-weight:600;}
-  #filter-bar #f-limpiar:hover{color:var(--text);border-color:var(--red);}
-  #filter-bar .hint{margin-left:auto;font-size:11.5px;color:var(--muted);font-family:var(--mono);}
+  #filter-bar label{font-size:11.5px;font-weight:600;color:var(--muted);margin-right:2px;}
+  #filter-bar input, #filter-bar select{background:var(--panel);border:1px solid var(--border);color:var(--text);
+    border-radius:9px;padding:8px 11px;font-size:12.5px;box-shadow:var(--shadow-sm);}
+  #filter-bar button{background:var(--accent);color:var(--accent-ink);border:none;border-radius:9px;padding:9px 16px;font-size:12.5px;font-weight:700;cursor:pointer;box-shadow:var(--shadow-sm);}
+  #filter-bar button:hover{background:var(--accent-strong);}
+  #filter-bar #f-limpiar{background:var(--panel);color:var(--text-soft);border:1px solid var(--border);font-weight:600;}
+  #filter-bar #f-limpiar:hover{color:var(--text);border-color:var(--muted);background:var(--panel);}
+  #filter-bar .hint{margin-left:auto;font-size:12px;color:var(--muted);}
 
-  main{flex:1;min-height:0;overflow:auto;padding:20px;}
+  main{grid-area:main;min-height:0;overflow:auto;padding:22px 28px 28px;}
   .tab-panel{display:none;}
   .tab-panel.active{display:block;}
 
   /* ============ KPI tiles ============ */
-  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;}
-  .kpi-tile{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px 20px;position:relative;overflow:hidden;
+  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(176px,1fr));gap:14px;margin-bottom:22px;}
+  .kpi-tile{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;position:relative;overflow:hidden;box-shadow:var(--shadow-sm);
     transition:box-shadow .15s ease,transform .15s ease;}
   .kpi-tile:hover{box-shadow:var(--shadow);transform:translateY(-1px);}
-  .kpi-tile .bar{position:absolute;left:0;top:0;bottom:0;width:3px;}
-  .kpi-tile .top-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px;}
-  .kpi-tile .icon-badge{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
-  .kpi-tile .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:700;}
-  .kpi-tile .value{font-family:var(--mono);font-size:30px;font-weight:800;line-height:1;}
-  .kpi-tile .sub{font-size:11px;color:var(--muted);margin-top:6px;}
+  .kpi-tile .top-row{display:flex;align-items:center;gap:11px;margin-bottom:14px;}
+  .kpi-tile .icon-badge{order:-1;width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .kpi-tile .icon-badge svg.ic{width:18px;height:18px;}
+  .kpi-tile .label{font-size:12.5px;color:var(--text-soft);font-weight:600;line-height:1.3;}
+  .kpi-tile .value{font-size:29px;font-weight:800;line-height:1.05;letter-spacing:-.025em;font-variant-numeric:tabular-nums;}
+  .kpi-tile .sub{font-size:11.5px;color:var(--muted);margin-top:7px;}
 
   /* ============ Cards / grids ============ */
   .grid-2{display:grid;grid-template-columns:1.3fr 1fr;gap:16px;}
@@ -132,20 +168,20 @@
   @media (max-width:980px){.grid-2,.grid-3{grid-template-columns:1fr;}}
   /* Sin esto una tabla ancha dentro de una tarjeta empuja la columna del grid y la tarjeta se sale de la pantalla. */
   .grid-2 > *,.grid-3 > *{min-width:0;}
-  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin-bottom:16px;}
-  .card h3{margin:0 0 4px;font-size:14px;}
-  .card p.hint{margin:0 0 12px;font-size:11.5px;color:var(--muted);}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;margin-bottom:16px;box-shadow:var(--shadow-sm);}
+  .card h3{margin:0 0 4px;font-size:15px;font-weight:700;letter-spacing:-.01em;}
+  .card p.hint{margin:0 0 14px;font-size:12px;color:var(--muted);line-height:1.5;}
   .card-header-row{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;}
   .card-header-row .btn-sm{flex-shrink:0;white-space:nowrap;}
   .chart-box{position:relative;height:260px;}
   .chart-box.tall{height:340px;}
 
   table{width:100%;border-collapse:collapse;font-size:12.5px;}
-  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--border-soft);white-space:nowrap;}
-  th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.03em;position:sticky;top:0;background:var(--panel);}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--border-soft);white-space:nowrap;}
+  th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em;position:sticky;top:0;background:var(--panel-alt);z-index:1;}
   tbody tr:nth-child(even){background:var(--panel-alt);}
-  tbody tr:hover{filter:brightness(.97);}
-  .table-scroll{max-height:420px;overflow:auto;border-radius:10px;border:1px solid var(--border-soft);}
+  tbody tr:hover{filter:brightness(.975);}
+  .table-scroll{max-height:420px;overflow:auto;border-radius:10px;border:1px solid var(--border);}
   td.num, th.num{text-align:right;font-family:var(--mono);}
   .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:10.5px;font-weight:700;}
   .pill.a{background:var(--green-dim);color:var(--green);}
@@ -156,7 +192,7 @@
   /* ============ Marcaciones de hoy (una fila por colaborador) ============ */
   .vivo-buscar{width:100%;max-width:320px;background:var(--panel-alt);border:1px solid var(--border);color:var(--text);
     border-radius:9px;padding:9px 13px;font-size:12.5px;margin:14px 0 12px;}
-  .vivo-buscar:focus{outline:none;border-color:var(--red);}
+  .vivo-buscar:focus{outline:none;border-color:var(--accent);}
   #feed-list{max-height:560px;overflow:auto;}
   #feed-list td.nombre{font-weight:700;color:var(--text);display:flex;align-items:center;gap:10px;}
   .avatar{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;
@@ -174,10 +210,12 @@
   .feed-empty{padding:30px;text-align:center;color:var(--muted);font-size:13px;}
 
   .loading{padding:30px;text-align:center;color:var(--muted);font-size:13px;}
-  .btn-sm{background:var(--panel-alt);border:1px solid var(--border);color:var(--text-soft);border-radius:8px;
-    padding:6px 12px;font-size:12px;cursor:pointer;}
-  .btn-sm:hover{color:var(--text);}
-  .btn-sm.primary{background:var(--red);border-color:var(--red);color:#fff;}
+  .btn-sm{display:inline-flex;align-items:center;justify-content:center;gap:6px;background:var(--panel);border:1px solid var(--border);color:var(--text-soft);border-radius:9px;
+    padding:7px 13px;font-size:12.5px;font-weight:600;cursor:pointer;box-shadow:var(--shadow-sm);}
+  .btn-sm:hover{color:var(--text);border-color:var(--muted);}
+  .btn-sm .ic{width:15px;height:15px;}
+  .btn-sm.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);}
+  .btn-sm.primary:hover{background:var(--accent-strong);border-color:var(--accent-strong);color:var(--accent-ink);}
 
   .sueldo-input{width:100px;background:var(--panel-alt);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:5px 8px;font-size:12.5px;font-family:var(--mono);}
   .missing{color:var(--amber);}
@@ -190,10 +228,12 @@
   .persona-card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px;text-align:center;}
   .persona-card.pendiente{border-color:rgba(245,166,35,.35);}
   .persona-foto{width:76px;height:76px;border-radius:50%;object-fit:cover;margin:0 auto 10px;display:block;background:var(--panel-alt);border:2px solid var(--border);}
-  .persona-foto.placeholder{display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--muted);}
+  .persona-foto.placeholder{display:flex;align-items:center;justify-content:center;color:var(--muted);}
+  .persona-foto.placeholder svg.ic{width:30px;height:30px;stroke-width:1.6;}
   .persona-card .nombre{font-size:12.5px;font-weight:700;line-height:1.3;min-height:32px;}
   .persona-card .meta{font-size:10.5px;color:var(--muted);margin:4px 0 8px;}
-  .estado-pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:700;}
+  .estado-pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:700;}
+  .estado-pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;}
   .estado-pill.ok{background:var(--green-dim);color:var(--green);}
   .estado-pill.pend{background:var(--amber-dim);color:var(--amber);}
 
@@ -205,7 +245,7 @@
   .personal-modal-card p.hint{margin:0 0 16px;font-size:12px;color:var(--muted);line-height:1.5;}
   .personal-modal-card label{display:block;font-size:11px;color:var(--muted);margin:12px 0 5px;text-transform:uppercase;letter-spacing:.04em;}
   .personal-modal-card input,.personal-modal-card select{width:100%;padding:10px 12px;border-radius:9px;border:1px solid var(--border);background:var(--panel-alt);color:var(--text);font-size:14px;}
-  .personal-modal-card input:focus,.personal-modal-card select:focus{outline:none;border-color:var(--red);}
+  .personal-modal-card input:focus,.personal-modal-card select:focus{outline:none;border-color:var(--accent);}
   .personal-modal-card input:disabled{opacity:.55;}
   .pm-row-2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
   .pm-status{margin-top:12px;font-size:12.5px;font-weight:600;min-height:16px;}
@@ -217,8 +257,8 @@
   .pm-zonas{display:flex;flex-wrap:wrap;gap:8px;}
   .personal-modal-card .pm-zonas label{display:flex;align-items:center;gap:7px;margin:0;padding:8px 12px;border:1px solid var(--border);
     border-radius:9px;background:var(--panel-alt);font-size:12.5px;color:var(--text);text-transform:none;letter-spacing:0;cursor:pointer;}
-  .personal-modal-card .pm-zonas label:has(input:checked){border-color:var(--red);background:var(--red-tint);font-weight:700;}
-  .personal-modal-card .pm-zonas input{width:auto;margin:0;accent-color:var(--red);}
+  .personal-modal-card .pm-zonas label:has(input:checked){border-color:var(--accent);background:var(--accent-tint);font-weight:700;}
+  .personal-modal-card .pm-zonas input{width:auto;margin:0;accent-color:var(--accent);}
 
   /* ============ Zonas de picking ============ */
   .zona-badges{display:inline-flex;flex-wrap:wrap;gap:4px;}
@@ -239,11 +279,11 @@
   .pk-field.grow{flex:1;min-width:200px;}
   .pk-field > label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:700;}
   .pk-field input,.pk-field select{background:var(--panel-alt);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 11px;font-size:12.5px;}
-  .pk-field input:focus,.pk-field select:focus{outline:none;border-color:var(--red);}
+  .pk-field input:focus,.pk-field select:focus{outline:none;border-color:var(--accent);}
   .pk-fecha-row{display:flex;gap:6px;align-items:center;}
   .pk-fecha-row .btn-sm{padding:8px 11px;}
   .pk-check{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-soft);padding-bottom:9px;cursor:pointer;white-space:nowrap;}
-  .pk-check input{accent-color:var(--red);}
+  .pk-check input{accent-color:var(--accent);}
   .pk-nota{margin:12px 0 0;font-size:12px;color:var(--muted);line-height:1.5;}
   .pk-nota.warn{color:var(--amber);}
   /* Apartados de Picking: Indicadores / Registro */
@@ -251,7 +291,7 @@
   .pk-subnav button{background:none;border:none;border-bottom:3px solid transparent;margin-bottom:-1px;padding:11px 20px;font-size:14px;font-weight:700;
     color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;gap:8px;white-space:nowrap;}
   .pk-subnav button:hover{color:var(--text-soft);}
-  .pk-subnav button.on{color:var(--text);border-bottom-color:var(--red);}
+  .pk-subnav button.on{color:var(--accent-text);border-bottom-color:var(--accent);}
   .pk-badge{background:var(--amber-dim);color:var(--amber);border-radius:999px;padding:1px 9px;font-size:11px;font-weight:800;font-family:var(--mono);}
   #panel-picking[data-vista="ind"] .pk-solo-reg{display:none!important;}
   .pk-linea{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin:0 0 14px;}
@@ -260,17 +300,17 @@
   .pk-linea span.warn{border-color:rgba(245,166,35,.55);}
   .pk-linea span.warn b{color:var(--amber);}
   .pk-linea span.mal b{color:var(--red);}
-  .pk-filtro-activo{background:var(--red-tint);color:var(--red);border:1px solid var(--red);border-radius:999px;padding:6px 14px;font-size:12.5px;font-weight:700;cursor:pointer;}
+  .pk-filtro-activo{background:var(--accent-tint);color:var(--accent-text);border:1px solid var(--accent);border-radius:999px;padding:6px 14px;font-size:12.5px;font-weight:700;cursor:pointer;}
   /* Movimientos: carga del Excel e historial */
   .mv-subir{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;}
   .mv-drop{flex:1;min-width:260px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:26px 16px;
     border:2px dashed var(--border);border-radius:14px;background:var(--panel-alt);cursor:pointer;text-align:center;color:var(--text-soft);}
   .mv-drop b{font-size:14px;color:var(--text);} .mv-drop span{font-size:12px;color:var(--muted);}
-  .mv-drop:hover,.mv-drop.drag{border-color:var(--red);background:var(--red-tint);}
+  .mv-drop:hover,.mv-drop.drag{border-color:var(--accent);background:var(--accent-tint);}
   .pk-nota.warn{color:var(--amber);}
   .mv-tipo{display:inline-block;padding:3px 11px;border-radius:999px;font-size:11.5px;font-weight:700;white-space:nowrap;}
   .mv-camb{background:var(--amber-dim);color:var(--amber);}
-  .mv-aplicar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;position:sticky;bottom:12px;z-index:5;box-shadow:var(--shadow);border-color:var(--red);}
+  .mv-aplicar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;position:sticky;bottom:12px;z-index:5;box-shadow:var(--shadow);border-color:var(--accent);}
   .mv-resumen{font-size:13px;color:var(--text-soft);line-height:1.6;flex:1;min-width:240px;}
   .mv-resumen b{color:var(--text);font-family:var(--mono);}
   .mv-ok{border-color:var(--green);}
@@ -293,39 +333,39 @@
   .pk-chip small{color:var(--muted);}
   .pk-chip:hover{border-color:var(--c);}
   .pk-chip.on{border-color:var(--c);box-shadow:inset 0 0 0 1px var(--c);font-weight:700;}
-  .pk-bulk{display:flex;flex-wrap:wrap;align-items:center;gap:10px;background:var(--red-tint);border:1px solid var(--red-dim);
+  .pk-bulk{display:flex;flex-wrap:wrap;align-items:center;gap:10px;background:var(--accent-tint);border:1px solid var(--accent-dim);
     border-radius:10px;padding:9px 13px;margin-bottom:12px;font-size:12.5px;}
   .pk-bulk select{background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 9px;font-size:12.5px;}
   .pk-tabla td,.pk-tabla th{padding:8px 10px;}
   .pk-tabla tr.sin-func{box-shadow:inset 3px 0 0 var(--amber);}
   .pk-tabla tr.presente-sin{box-shadow:inset 3px 0 0 var(--red);}
-  .pk-tabla input[type=checkbox]{accent-color:var(--red);width:15px;height:15px;cursor:pointer;}
+  .pk-tabla input[type=checkbox]{accent-color:var(--accent);width:15px;height:15px;cursor:pointer;}
   .pk-nombre{display:flex;align-items:center;gap:10px;font-weight:700;}
   .pk-nombre small{display:block;font-weight:500;color:var(--muted);font-family:var(--mono);font-size:10.5px;}
   .pk-tabla td.meta{color:var(--muted);font-size:11.5px;}
   .pk-sel{min-width:150px;padding:6px 8px;border-radius:8px;border:1px solid var(--border);border-left:4px solid var(--c,var(--border));
     background:var(--panel-alt);color:var(--text);font-size:12.5px;font-weight:600;cursor:pointer;}
   .pk-sel.vacio{color:var(--muted);font-weight:500;}
-  .pk-sel:focus{outline:none;border-color:var(--red);border-left-color:var(--c,var(--red));}
+  .pk-sel:focus{outline:none;border-color:var(--accent);border-left-color:var(--c,var(--accent));}
   .pk-pill{display:inline-block;padding:3px 11px;border-radius:999px;font-size:11.5px;font-weight:700;white-space:nowrap;}
   .pk-resumen tbody tr{cursor:pointer;}
-  .pk-resumen tbody tr.on{background:var(--red-tint)!important;}
+  .pk-resumen tbody tr.on{background:var(--accent-tint)!important;}
   .pk-seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;flex-shrink:0;}
   .pk-seg button{background:var(--panel-alt);border:none;padding:7px 13px;font-size:12px;font-weight:600;color:var(--text-soft);cursor:pointer;white-space:nowrap;}
   .pk-seg button + button{border-left:1px solid var(--border);}
-  .pk-seg button.on{background:var(--red);color:#fff;font-weight:700;}
+  .pk-seg button.on{background:var(--accent);color:var(--accent-ink);font-weight:700;}
   .pk-hd-tools{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px;}
   .pk-hd-tools select{background:var(--panel-alt);}
   .pk-leyenda{display:flex;flex-wrap:wrap;gap:8px 14px;margin:0 0 10px;font-size:11.5px;color:var(--text-soft);}
   .pk-leyenda span{display:inline-flex;align-items:center;gap:6px;}
   .pk-hd-tabla td,.pk-hd-tabla th{padding:7px 9px;}
   .pk-hd-tabla th[data-fecha]{cursor:pointer;text-align:center;}
-  .pk-hd-tabla th[data-fecha]:hover{color:var(--red);}
+  .pk-hd-tabla th[data-fecha]:hover{color:var(--accent);}
   .pk-hd-tabla tbody tr[data-fecha],.pk-hd-tabla tbody tr[data-key]{cursor:pointer;}
-  .pk-hd-tabla tbody tr.on td{background:var(--red-tint)!important;}
+  .pk-hd-tabla tbody tr.on td{background:var(--accent-tint)!important;}
   .pk-hd-tabla tr.vacio td{color:var(--muted);}
-  .pk-hd-tabla th.hoy{color:var(--red);}
-  .pk-hd-tabla td.hoy{background-image:linear-gradient(var(--red-tint),var(--red-tint));}
+  .pk-hd-tabla th.hoy{color:var(--accent);}
+  .pk-hd-tabla td.hoy{background-image:linear-gradient(var(--accent-tint),var(--accent-tint));}
   .pk-hd-tabla.sticky td:first-child,.pk-hd-tabla.sticky th:first-child{position:sticky;left:0;z-index:2;background:var(--panel);}
   .pk-hd-tabla.sticky th:first-child{z-index:3;}
   .pk-hd-tabla.sticky tbody tr:nth-child(even) td:first-child{background:var(--panel-alt);}
@@ -347,31 +387,44 @@
   .cfg-add input,.cfg-nombre{background:var(--panel-alt);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 11px;font-size:12.5px;}
   .cfg-add input{flex:1;min-width:200px;max-width:360px;}
   .cfg-nombre{width:100%;min-width:170px;}
-  .cfg-add input:focus,.cfg-nombre:focus{outline:none;border-color:var(--red);}
+  .cfg-add input:focus,.cfg-nombre:focus{outline:none;border-color:var(--accent);}
   .cfg-orden{display:inline-flex;gap:4px;}
   .cfg-orden .btn-sm{padding:4px 9px;}
   .cfg-activa{display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;}
-  .cfg-activa input{accent-color:var(--red);width:15px;height:15px;}
+  .cfg-activa input{accent-color:var(--accent);width:15px;height:15px;}
   .cfg-lista{margin:0;padding-left:18px;font-size:12.5px;color:var(--text-soft);line-height:1.7;}
   tr.cfg-inactiva td:not(:last-child){opacity:.55;}
   .cfg-areas{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-top:12px;}
   .cfg-area{display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border);border-radius:9px;background:var(--panel-alt);
     font-size:12.5px;cursor:pointer;}
-  .cfg-area:has(input:checked){border-color:var(--red);background:var(--red-tint);font-weight:700;}
+  .cfg-area:has(input:checked){border-color:var(--accent);background:var(--accent-tint);font-weight:700;}
   .cfg-area small{margin-left:auto;font-family:var(--mono);color:var(--muted);}
-  .cfg-area input{accent-color:var(--red);}
+  .cfg-area input{accent-color:var(--accent);}
 
-  /* ============ Celular: que nada se salga de la pantalla (Salir, modo noche, barras de herramientas) ============ */
+  /* ============ Tablet y celular: el menu lateral pasa a barra horizontal y nada se sale de la pantalla ============ */
+  @media (max-width:900px){
+    #app.show{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto minmax(0,1fr);grid-template-areas:"head" "side" "filter" "main";}
+    header{padding:0 14px;height:56px;gap:10px;}
+    header .head-brand{display:flex;}
+    header .titulo{display:none;}
+    nav#tabs{flex-direction:row;align-items:center;gap:4px;padding:8px 12px;overflow-x:auto;overflow-y:hidden;border-right:none;border-bottom:1px solid var(--border);}
+    .side-brand,.nav-grupo{display:none;}
+    nav#tabs button{width:auto;padding:8px 13px;}
+    nav#tabs{scrollbar-width:none;}
+    nav#tabs::-webkit-scrollbar{display:none;}
+    #filter-bar{padding:12px 14px 0;}
+    main{padding:14px;}
+  }
   @media (max-width:640px){
-    header{padding:10px 12px;gap:8px;}
-    header .subtitle,header .clock{display:none;}
-    header .user-chip{min-width:0;margin-left:auto;}
-    header .user-chip #user-nombre{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-    header .user-chip .role{display:none;}
-    nav#tabs{padding:8px 12px 0;}
-    #filter-bar{padding:10px 12px;}
+    header .clock,header .user-txt,header .logout-btn .lbl{display:none;}
+    header .head-brand{font-size:14px;}
+    header .head-brand [data-marca]{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+    .kpi-tile{padding:13px 14px;}
+    .kpi-tile .top-row{flex-direction:column;align-items:flex-start;gap:8px;margin-bottom:10px;}
+    .kpi-tile .value{font-size:24px;}
+    header .logout-btn{padding:8px 10px;}
     #filter-bar .hint{margin-left:0;width:100%;}
-    main{padding:12px;}
     .card-header-row{flex-wrap:wrap;}
     .pk-hd-tools{width:100%;justify-content:flex-start;}
     .pk-hd-tools .pk-seg{width:100%;}
@@ -384,40 +437,60 @@
 <body>
 
 <div id="login-screen">
-  <form class="login-card" id="login-form">
-    <div class="logo-row"><img src="icons/icon-512.png" alt="Adecco"><b>ADECCO</b></div>
-    <h2>Centro de Control de Asistencia</h2>
-    <label for="login-username">Usuario</label>
-    <input id="login-username" autocomplete="username" required>
-    <label for="login-password">Contraseña</label>
-    <input id="login-password" type="password" autocomplete="current-password" required>
-    <button type="submit" id="login-btn">Ingresar</button>
-    <div class="login-error" id="login-error"></div>
-  </form>
+  <aside class="login-hero">
+    <div class="hero-brand"><span data-marca-logo></span><span data-marca="producto"></span></div>
+    <div class="hero-body">
+      <h2 data-marca="lema"></h2>
+      <ul class="hero-list">
+        <li>Marcación biométrica en kiosco y en el celular</li>
+        <li>Picking y funciones diarias por supervisor y turno</li>
+        <li>Ausentismo, rotación y planilla al día</li>
+      </ul>
+    </div>
+    <div class="hero-foot" data-marca="empresa"></div>
+  </aside>
+  <div class="login-panel">
+    <form class="login-card" id="login-form">
+      <div class="login-brand-mobile"><span data-marca-logo></span><span data-marca="producto"></span></div>
+      <h1>Iniciar sesión</h1>
+      <p class="login-sub">Ingresa al Centro de Control de Asistencia</p>
+      <label for="login-username">Usuario</label>
+      <input id="login-username" autocomplete="username" required>
+      <label for="login-password">Contraseña</label>
+      <input id="login-password" type="password" autocomplete="current-password" required>
+      <button type="submit" id="login-btn">Ingresar</button>
+      <div class="login-error" id="login-error"></div>
+    </form>
+  </div>
 </div>
 
 <div id="app">
   <header>
-    <div class="logo-row"><img src="icons/icon-512.png" alt="Adecco"><b class="brand">ADECCO</b></div>
-    <span class="subtitle">Centro de Control</span>
+    <div class="head-brand"><span data-marca-logo></span><span data-marca="producto"></span></div>
+    <div class="titulo"><h1 id="page-title">En Vivo</h1></div>
     <span class="live-pulse" title="En vivo"></span>
     <span class="clock" id="clock">--:--:--</span>
     <div class="spacer"></div>
-    <div class="user-chip"><span id="user-nombre">—</span><span class="role" id="user-rol">—</span></div>
-    <button class="theme-toggle" id="theme-toggle" type="button" title="Cambiar a modo noche">🌙</button>
-    <button class="logout-btn" id="logout-btn">Salir</button>
+    <div class="user-chip"><span class="user-av" id="user-av">—</span><div class="user-txt"><span id="user-nombre">—</span><span class="role" id="user-rol">—</span></div></div>
+    <button class="theme-toggle" id="theme-toggle" type="button" title="Cambiar a modo noche"></button>
+    <button class="logout-btn" id="logout-btn" title="Cerrar sesión"><i data-ic="logout"></i><span class="lbl">Salir</span></button>
   </header>
 
   <nav id="tabs">
-    <button data-tab="vivo" class="active">🟢 En Vivo</button>
-    <button data-tab="picking">📦 Picking</button>
-    <button data-tab="ausentismo">📉 Ausentismo</button>
-    <button data-tab="rotacion">🔁 Rotación</button>
-    <button data-tab="general">📊 Asistencia General</button>
-    <button data-tab="personal">🪪 Personal</button>
-    <button data-tab="pagos">💰 Pagos</button>
-    <button data-tab="movimientos" id="tab-movimientos" hidden>🔁 Movimientos</button>
-    <button data-tab="config" id="tab-config" hidden>⚙️ Configuración</button>
+    <div class="side-brand"><span data-marca-logo></span><div class="nombre"><b data-marca="producto"></b><small data-marca="empresa"></small></div></div>
+    <div class="nav-grupo">Operación</div>
+    <button data-tab="vivo" class="active"><i data-ic="vivo"></i><span class="t">En Vivo</span></button>
+    <button data-tab="picking"><i data-ic="picking"></i><span class="t">Picking</span></button>
+    <div class="nav-grupo">Análisis</div>
+    <button data-tab="ausentismo"><i data-ic="ausentismo"></i><span class="t">Ausentismo</span></button>
+    <button data-tab="rotacion"><i data-ic="rotacion"></i><span class="t">Rotación</span></button>
+    <button data-tab="general"><i data-ic="general"></i><span class="t">Asistencia General</span></button>
+    <div class="nav-grupo">Gestión</div>
+    <button data-tab="personal"><i data-ic="personal"></i><span class="t">Personal</span></button>
+    <button data-tab="pagos"><i data-ic="pagos"></i><span class="t">Pagos</span></button>
+    <button data-tab="movimientos" id="tab-movimientos" hidden><i data-ic="movimientos"></i><span class="t">Movimientos</span></button>
+    <div class="nav-grupo" id="grp-sistema" hidden>Sistema</div>
+    <button data-tab="config" id="tab-config" hidden><i data-ic="config"></i><span class="t">Configuración</span></button>
   </nav>
 
   <div id="filter-bar">
@@ -488,14 +561,14 @@ const SESSION_KEY = "asis-control-token";
 const ROLE_LABELS = { admin:"Administrador", gerencia:"Gerencia", coordinador:"Coordinador", rrhh:"Gestión Humana", supervisor:"Supervisor",
   operador:"Operador", supervisor_ssoma:"Supervisor SSOMA", invitado:"Invitado" };
 
-/* Mismos codigos/colores que el modulo Asistencia y Rotacion de Adecco
-   KPI (asistencia.js) -- no reinventar la clasificacion de negocio. */
+/* Mismos codigos/colores que el modulo Asistencia y Rotacion del
+   dashboard KPI (asistencia.js) -- no reinventar la clasificacion de negocio. */
 const ASIS_CODE_LABEL = { A:'Asistió', AM:'At. Médica', DF:'Desc. Físico', DM:'Desc. Médico', DT:'Desc. Trabajado',
   F:'Falta', FRD:'Feriado', LCGH:'Lic. c/goce', LSGH:'Lic. s/goce', P:'Permiso', S:'Suspensión', V:'Vacaciones' };
 const ASIS_BUCKETS = [
   { key:'A', label:'Asistencia', codes:['A'], color:'#22C55E' },
   { key:'V', label:'Vacaciones', codes:['V'], color:'#A78BFA' },
-  { key:'F', label:'Faltas', codes:['F'], color:'#FF3B4E' },
+  { key:'F', label:'Faltas', codes:['F'], color:'#EF4444' },
   { key:'FJ', label:'F.J. (Justificada)', codes:['AM','DF','DM','DT','FRD','LCGH','LSGH','P','S'], color:'#F5A623' },
 ];
 function bucketOf(code){
@@ -513,7 +586,7 @@ function fmtHora(iso){ return new Date(iso).toLocaleTimeString("es-PE",{hour:"2-
 // de nuevo cada vez -- no hace falta actualizar instancias existentes).
 function ejesChartTema(){
   const oscuro = document.documentElement.getAttribute("data-theme") === "dark";
-  return { grid: { color: oscuro ? "#232733" : "#E5E7EB" }, ticks: { color: oscuro ? "#7C8496" : "#8B92A0" } };
+  return { grid: { color: oscuro ? "#232733" : "#E9EBF1" }, ticks: { color: oscuro ? "#7C8496" : "#7A8294" } };
 }
 function fmtFecha(d){ return new Date(d+"T00:00:00").toLocaleDateString("es-PE",{day:"2-digit",month:"short"}); }
 function todayISO(){ return new Date().toLocaleDateString("sv-SE"); }
@@ -547,6 +620,55 @@ function addDays(iso, n){
   d.setDate(d.getDate() + n);
   return d.toLocaleDateString("sv-SE");
 }
+
+/* ================= Iconos (trazo, 24x24) ================= */
+const ICONOS = {
+  vivo:'<path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/>',
+  picking:'<path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
+  ausentismo:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="17" x2="22" y1="8" y2="13"/><line x1="22" x2="17" y1="8" y2="13"/>',
+  rotacion:'<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
+  general:'<path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+  personal:'<path d="M16 10h2"/><path d="M16 14h2"/><path d="M6.17 15a3 3 0 0 1 5.66 0"/><circle cx="9" cy="11" r="2"/><rect x="2" y="5" width="20" height="14" rx="2"/>',
+  pagos:'<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/>',
+  movimientos:'<path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/>',
+  config:'<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+  logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>',
+  sol:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
+  luna:'<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+  usuarios:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  usuario:'<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  ok:'<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+  almuerzo:'<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/>',
+  alerta:'<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  cerrado:'<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>',
+  baja:'<polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/>',
+  entra:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
+  sale:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/>',
+  cronometro:'<line x1="10" x2="14" y1="2" y2="2"/><line x1="12" x2="15" y1="14" y2="11"/><circle cx="12" cy="14" r="8"/>',
+  reloj:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  espera:'<path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/>',
+  senal:'<path d="M2 20h.01"/><path d="M7 20v-4"/><path d="M12 20v-8"/><path d="M17 20V8"/><path d="M22 4v16"/>',
+  billete:'<rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/>',
+  descanso:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
+  documento:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+  mas:'<path d="M5 12h14"/><path d="M12 5v14"/>',
+  deshacer:'<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/>',
+  contraste:'<circle cx="12" cy="12" r="10"/><path d="M12 18a6 6 0 0 0 0-12v12z"/>',
+  cambio:'<path d="m18 14 4 4-4 4"/><path d="m18 2 4 4-4 4"/><path d="M2 18h1.973a4 4 0 0 0 3.3-1.7l5.454-8.6a4 4 0 0 1 3.3-1.7H22"/><path d="M2 6h1.972a4 4 0 0 1 3.6 2.2"/><path d="M22 18h-6.041a4 4 0 0 1-3.3-1.8l-.359-.45"/>',
+  lapiz:'<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>',
+  indicadores:'<path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>',
+  papelera:'<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  copiar:'<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+  registro:'<rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/>',
+};
+// Los indicadores se escribieron con emojis; aqui se traducen al icono de trazo equivalente (lo desconocido se deja como esta).
+const EMOJI_ICONO = { "👥":"usuarios", "✅":"ok", "🍽️":"almuerzo", "🚪":"sale", "⚠️":"alerta", "❌":"cerrado", "📉":"baja", "📥":"entra", "📤":"sale",
+  "🔁":"rotacion", "⏱️":"cronometro", "🕒":"reloj", "⏳":"espera", "🪪":"personal", "📶":"senal", "💸":"billete", "💰":"pagos", "🏖️":"descanso",
+  "📄":"documento", "➕":"mas", "↩️":"deshacer", "🌓":"contraste", "🔀":"cambio", "✏️":"lapiz" };
+const ic = (nombre, extra) => ICONOS[nombre] ? `<svg class="ic${extra ? " " + extra : ""}" viewBox="0 0 24 24" aria-hidden="true">${ICONOS[nombre]}</svg>` : "";
+const icEmoji = (e) => EMOJI_ICONO[e] ? ic(EMOJI_ICONO[e]) : e;
+// <i data-ic="nombre"></i> en el HTML estatico se cambia por su icono.
+document.querySelectorAll("i[data-ic]").forEach(el => el.outerHTML = ic(el.dataset.ic));
 
 /* ================= Sesión / login ================= */
 let session = null; // {token, nombre, rol, permisos}
@@ -598,14 +720,14 @@ document.getElementById("logout-btn").addEventListener("click", async () => {
   location.reload();
 });
 
-/* ================= Tema (blanco/rojo por defecto, modo noche opcional) ================= */
+/* ================= Tema (claro por defecto, modo noche opcional) ================= */
 const themeToggleBtn = document.getElementById("theme-toggle");
 const metaThemeColor = document.getElementById("meta-theme-color");
 function aplicarIconoTema(){
   const oscuro = document.documentElement.getAttribute("data-theme") === "dark";
-  themeToggleBtn.textContent = oscuro ? "☀️" : "🌙";
+  themeToggleBtn.innerHTML = ic(oscuro ? "sol" : "luna");
   themeToggleBtn.title = oscuro ? "Cambiar a modo claro" : "Cambiar a modo noche";
-  metaThemeColor.setAttribute("content", oscuro ? "#0B0D12" : "#F3F4F6");
+  metaThemeColor.setAttribute("content", oscuro ? "#0B0D12" : "#F5F6FA");
 }
 themeToggleBtn.addEventListener("click", () => {
   const oscuro = document.documentElement.getAttribute("data-theme") === "dark";
@@ -787,6 +909,7 @@ document.querySelectorAll("#tabs button").forEach(btn => {
     document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
     btn.classList.add("active");
     tabActivo = btn.dataset.tab;
+    document.getElementById("page-title").textContent = btn.querySelector(".t").textContent;
     document.getElementById("panel-" + tabActivo).classList.add("active");
     pararFeedVivo();
     renderTabActivo();
@@ -829,12 +952,12 @@ let feedIdsVistos = new Set();
 function pararFeedVivo(){ clearTimeout(feedTimer); feedTimer = null; }
 
 function kpiTile(label, value, sub, color, icon){
-  return `<div class="kpi-tile"><div class="bar" style="background:${color}"></div>
+  return `<div class="kpi-tile">
     <div class="top-row">
       <div class="label">${label}</div>
-      ${icon ? `<div class="icon-badge" style="background:${color}1F;color:${color};">${icon}</div>` : ""}
+      ${icon ? `<div class="icon-badge" style="background:${color}1F;color:${color};">${icEmoji(icon)}</div>` : ""}
     </div>
-    <div class="value" style="color:${color}">${value}</div>
+    <div class="value">${value}</div>
     <div class="sub">${sub||""}</div></div>`;
 }
 
@@ -925,7 +1048,7 @@ async function tickVivo(primeraVez, gen){
         ${kpiTile("Marcaron ingreso", dniIngreso.size, totalActivos ? Math.round(dniIngreso.size/totalActivos*100)+"% del activo" : "", "#22C55E", "✅")}
         ${kpiTile("En almuerzo", enAlmuerzo, "salieron y no volvieron", "#F5A623", "🍽️")}
         ${kpiTile("Ya marcaron salida", dniSalida.size, "", "#A78BFA", "🚪")}
-        ${kpiTile("Tardanzas hoy", tardanzas, "ingreso fuera de ventana", "#FF3B4E", "⚠️")}
+        ${kpiTile("Tardanzas hoy", tardanzas, "ingreso fuera de ventana", "#EF4444", "⚠️")}
         ${kpiTile("Ausentes (aún)", Math.max(0,ausentes), "activos sin ingreso marcado", "#7C8496", "❌")}
       </div>
       <div id="picking-strip">${pickingHtml}</div>
@@ -933,7 +1056,7 @@ async function tickVivo(primeraVez, gen){
         <div class="card-header-row">
           <div><h3>Marcaciones — hoy</h3>
           <p class="hint">Todo el personal activo en orden alfabético; la hora queda registrada en su columna apenas marca (— si aún no marca). Se actualiza sola cada 5s.</p></div>
-          <button class="btn-sm" id="btn-exportar-vivo">⬇ Exportar Excel</button>
+          <button class="btn-sm" id="btn-exportar-vivo">${ic("entra")}Exportar Excel</button>
         </div>
         <div style="display:flex;flex-wrap:wrap;align-items:center;column-gap:16px;">
           <input type="text" id="vivo-buscar" class="vivo-buscar" placeholder="Buscar colaborador, área o turno…">
@@ -956,7 +1079,7 @@ async function tickVivo(primeraVez, gen){
       ${kpiTile("Marcaron ingreso", dniIngreso.size, totalActivos ? Math.round(dniIngreso.size/totalActivos*100)+"% del activo" : "", "#22C55E", "✅")}
       ${kpiTile("En almuerzo", enAlmuerzo, "salieron y no volvieron", "#F5A623", "🍽️")}
       ${kpiTile("Ya marcaron salida", dniSalida.size, "", "#A78BFA", "🚪")}
-      ${kpiTile("Tardanzas hoy", tardanzas, "ingreso fuera de ventana", "#FF3B4E", "⚠️")}
+      ${kpiTile("Tardanzas hoy", tardanzas, "ingreso fuera de ventana", "#EF4444", "⚠️")}
       ${kpiTile("Ausentes (aún)", Math.max(0,ausentes), "activos sin ingreso marcado", "#7C8496", "❌")}
     `;
     const nuevas = marcasHoy.filter(m => !feedIdsVistos.has(m.id));
@@ -983,7 +1106,7 @@ let ultimosActivosVivo = []; // personal activo de hoy (censo con los filtros de
 let vivoFiltroTexto = "";
 let vivoSoloMarcaron = false;
 
-const AVATAR_PALETA = ["#3B82F6","#22C55E","#F5A623","#A78BFA","#22D3EE","#FF3B4E","#0EA5E9","#84CC16"];
+const AVATAR_PALETA = ["#3B82F6","#22C55E","#F5A623","#A78BFA","#22D3EE","#EF4444","#0EA5E9","#84CC16"];
 function iniciales(nombre){
   const partes = (nombre||"").trim().split(/\s+/).filter(Boolean);
   return partes.length ? (partes[0][0] + (partes[1]?.[0]||"")).toUpperCase() : "?";
@@ -1173,10 +1296,10 @@ async function renderAusentismo(){
   panel.innerHTML = `
     ${diasSinMarcas ? `<div class="banner">${diasSinMarcas} de ${fechasCenso.length} días del rango no tienen ninguna marcación de Ingreso y no se cuentan (el kiosco no registró a nadie esos días).</div>` : ""}
     <div class="kpi-grid">
-      ${kpiTile("Tasa de ausentismo", tasaAusentismo+"%", "activos sin marcar Ingreso / activos", "#FF3B4E", "📉")}
+      ${kpiTile("Tasa de ausentismo", tasaAusentismo+"%", "activos sin marcar Ingreso / activos", "#EF4444", "📉")}
       ${kpiTile("Activos (persona-día)", totalActivosDia, "suma de activos por día", "#3B82F6", "👥")}
       ${kpiTile("Marcaron ingreso", totalPresentesDia, "", "#22C55E", "✅")}
-      ${kpiTile("Ausentes", totalAusentesDia, "activos que no marcaron", "#FF3B4E", "❌")}
+      ${kpiTile("Ausentes", totalAusentesDia, "activos que no marcaron", "#EF4444", "❌")}
     </div>
     <div class="card"><h3>Ausentismo diario</h3><p class="hint">% de activos que no marcaron Ingreso, por día.</p>
       <div class="chart-box"><canvas id="ch-ausent-diario"></canvas></div></div>
@@ -1197,7 +1320,7 @@ async function renderAusentismo(){
     <div class="card">
       <div class="card-header-row">
         <div><h3>Detalle de ausencias</h3><p class="hint">Colaboradores activos que no marcaron Ingreso ese día.</p></div>
-        <button class="btn-sm" id="btn-exportar-ausencias">⬇ Exportar Excel</button>
+        <button class="btn-sm" id="btn-exportar-ausencias">${ic("entra")}Exportar Excel</button>
       </div>
       <input type="text" id="ausencias-buscar" class="vivo-buscar" placeholder="Buscar colaborador, área o turno…">
       <div id="ausencias-lista"></div>
@@ -1222,16 +1345,16 @@ async function renderAusentismo(){
     type:"line",
     data:{ labels: fechas.map(fmtFecha), datasets:[{
       label:"% ausentismo", data: fechas.map(f => porFechaTasa[f].toFixed(1)),
-      borderColor:"#FF3B4E", backgroundColor:"rgba(255,59,78,.12)", fill:true, tension:.3,
+      borderColor:"#EF4444", backgroundColor:"rgba(239,68,68,.12)", fill:true, tension:.3,
     }]},
     options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},
-      datalabels:{ color:"#FF8A93", anchor:"end", align:"top", clamp:true, formatter:v=>v+"%" } },
+      datalabels:{ color:"#F87171", anchor:"end", align:"top", clamp:true, formatter:v=>v+"%" } },
       scales:{ x:{grid:darkGrid,ticks:darkTicks}, y:{grid:darkGrid,ticks:darkTicks,beginAtZero:true} } }
   });
   charts.ausentArea = new Chart(document.getElementById("ch-ausent-area"), {
     type:"bar",
     data:{ labels: areasSorted.map(a=>a[0]), datasets:[{
-      label:"% ausentismo", data: areasSorted.map(a => a[2].toFixed(1)), backgroundColor:"#FF3B4E", borderRadius:4,
+      label:"% ausentismo", data: areasSorted.map(a => a[2].toFixed(1)), backgroundColor:"#EF4444", borderRadius:4,
     }]},
     options:{ indexAxis:"y", responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},
       datalabels:{ color:"#fff", anchor:"center", align:"center", formatter:v=>v+"%" } },
@@ -1328,7 +1451,7 @@ async function renderRotacion(){
   panel.innerHTML = `
     <div class="kpi-grid">
       ${kpiTile("Altas", altas.length, "ingresos en el período", "#22C55E", "📥")}
-      ${kpiTile("Bajas", bajas.length, "ceses en el período", "#FF3B4E", "📤")}
+      ${kpiTile("Bajas", bajas.length, "ceses en el período", "#EF4444", "📤")}
       ${kpiTile("Tasa de rotación", tasaRotacion+"%", "bajas / dotación activa", "#F5A623", "🔁")}
       ${kpiTile("Dotación activa", activosPromedio, etiquetaFiltro("todas las áreas"), "#3B82F6", "👥")}
     </div>
@@ -1357,7 +1480,7 @@ async function renderRotacion(){
       type:"bar",
       data:{ labels: fechasAll.map(fmtFecha), datasets:[
         { label:"Altas", data: fechasAll.map(f=>porFechaAlta[f]||0), backgroundColor:"#22C55E", borderRadius:4 },
-        { label:"Bajas", data: fechasAll.map(f=>porFechaBaja[f]||0), backgroundColor:"#FF3B4E", borderRadius:4 },
+        { label:"Bajas", data: fechasAll.map(f=>porFechaBaja[f]||0), backgroundColor:"#EF4444", borderRadius:4 },
       ]},
       options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{labels:{color:"#AEB4C2"}},
         datalabels:{ color:"#fff", anchor:"end", align:"top", clamp:true } },
@@ -1423,7 +1546,7 @@ async function renderGeneral(){
   panel.innerHTML = `
     <div class="kpi-grid">
       ${kpiTile("Puntualidad", ingresos.length ? Math.round(aTiempo/ingresos.length*100)+"%" : "—", "ingresos a tiempo", "#22C55E", "⏱️")}
-      ${kpiTile("Tardanzas", tarde, "ingresos fuera de ventana", "#FF3B4E", "⚠️")}
+      ${kpiTile("Tardanzas", tarde, "ingresos fuera de ventana", "#EF4444", "⚠️")}
       ${kpiTile("Min. tarde (prom.)", tarde ? Math.round(minutosTardeTotal/tarde) : 0, "por tardanza", "#F5A623", "🕒")}
       ${kpiTile("Horas/jornada (prom.)", promedioHoras, jornadasCompletas+" jornadas completas", "#3B82F6", "⏳")}
     </div>
@@ -1437,7 +1560,7 @@ async function renderGeneral(){
       <div class="card-header-row">
         <div><h3>Registro de marcaciones</h3>
         <p class="hint">Una fila por colaborador por día, para el rango de fechas del filtro (${fmtFecha(filtros.desde)} → ${fmtFecha(filtros.hasta)}).</p></div>
-        <button class="btn-sm" id="btn-exportar-general">⬇ Exportar Excel</button>
+        <button class="btn-sm" id="btn-exportar-general">${ic("entra")}Exportar Excel</button>
       </div>
       <input type="text" id="general-buscar" class="vivo-buscar" placeholder="Buscar colaborador, área o turno…">
       <div id="general-lista"></div>
@@ -1454,13 +1577,13 @@ async function renderGeneral(){
     type:"bar",
     data:{ labels: areasSorted.map(a=>a[0]), datasets:[
       { label:"A tiempo", data: areasSorted.map(a=>a[1].aTiempo), backgroundColor:"#22C55E", borderRadius:4 },
-      { label:"Tardanza", data: areasSorted.map(a=>a[1].tarde), backgroundColor:"#FF3B4E", borderRadius:4 },
+      { label:"Tardanza", data: areasSorted.map(a=>a[1].tarde), backgroundColor:"#EF4444", borderRadius:4 },
     ]},
     options:{ indexAxis:"y", responsive:true, maintainAspectRatio:false, plugins:{legend:{labels:{color:"#AEB4C2"}},
       datalabels:{ color:"#fff", anchor:"center", align:"center" } },
       scales:{ x:{grid:darkGrid,ticks:darkTicks,stacked:true,beginAtZero:true}, y:{grid:{display:false},ticks:darkTicks,stacked:true} } }
   });
-  const TIPO_COLOR = { ingreso:"#22C55E", almuerzo_inicio:"#F5A623", almuerzo_fin:"#F5A623", salida:"#FF3B4E" };
+  const TIPO_COLOR = { ingreso:"#22C55E", almuerzo_inicio:"#F5A623", almuerzo_fin:"#F5A623", salida:"#EF4444" };
   const porTipo = {}; marcas.forEach(m => porTipo[m.tipo] = (porTipo[m.tipo]||0)+1);
   charts.genTipo = new Chart(document.getElementById("ch-gen-tipo"), {
     type:"doughnut",
@@ -1589,14 +1712,14 @@ function pintarPersonalGrid(){
     <div class="persona-card ${p.enrolado ? '' : 'pendiente'}">
       ${p.foto_path
         ? `<img class="persona-foto" src="${urlFoto(p.foto_path)}" alt="${p.nombre}" loading="lazy">`
-        : `<div class="persona-foto placeholder">${p.enrolado ? '🧑' : '❔'}</div>`}
+        : `<div class="persona-foto placeholder">${ic("usuario")}</div>`}
       <div class="nombre">${p.nombre}</div>
       <div class="meta">${p.dni} · ${[p.area, p.turno].filter(Boolean).join(" · ")}</div>
       ${zonasDe(p.dni).length ? `<div style="margin-bottom:8px;">${zonasBadges(p.dni)}</div>` : ""}
-      <span class="estado-pill ${p.enrolado ? 'ok' : 'pend'}">${p.enrolado ? '✅ Enrolado' : '⏳ Pendiente'}</span>
+      <span class="estado-pill ${p.enrolado ? 'ok' : 'pend'}">${p.enrolado ? 'Enrolado' : 'Pendiente'}</span>
       <div style="display:flex;gap:6px;margin-top:10px;">
-        <button class="btn-sm" style="flex:1;" onclick='abrirPersonalModal(${JSON.stringify(p).replace(/'/g,"&apos;")})'>✏️ Editar</button>
-        ${p.enrolado ? `<button class="btn-sm" style="flex:1;" data-dni="${p.dni.replace(/"/g,'&quot;')}" data-nombre="${p.nombre.replace(/"/g,'&quot;')}" onclick="eliminarRostroPersonal(this)">🗑️ Rostro</button>` : ""}
+        <button class="btn-sm" style="flex:1;" onclick='abrirPersonalModal(${JSON.stringify(p).replace(/'/g,"&apos;")})'>${ic("lapiz")}Editar</button>
+        ${p.enrolado ? `<button class="btn-sm" style="flex:1;" data-dni="${p.dni.replace(/"/g,'&quot;')}" data-nombre="${p.nombre.replace(/"/g,'&quot;')}" onclick="eliminarRostroPersonal(this)">${ic("papelera")}Rostro</button>` : ""}
       </div>
     </div>
   `).join("");
@@ -1611,7 +1734,7 @@ async function eliminarRostroPersonal(btn){
     await renderPersonal();
   }catch(e){
     alert(humanError(e));
-    btn.disabled = false; btn.textContent = "🗑️ Rostro";
+    btn.disabled = false; btn.innerHTML = ic("papelera") + "Rostro";
   }
 }
 
@@ -1759,7 +1882,7 @@ async function renderPagos(){
     cont.innerHTML = `
       <div class="kpi-grid" style="margin-bottom:14px;">
         ${kpiTile("Colaboradores", ultimaPlanilla.length, "", "#3B82F6", "👥")}
-        ${kpiTile("Total descuentos", money(totalDescuentos), "faltas + tardanzas", "#FF3B4E", "💸")}
+        ${kpiTile("Total descuentos", money(totalDescuentos), "faltas + tardanzas", "#EF4444", "💸")}
         ${kpiTile("Total a pagar", money(totalNeto), "sueldo neto", "#22C55E", "💰")}
       </div>
       <div class="table-scroll" style="max-height:420px;">
@@ -1798,7 +1921,7 @@ const PK_ROLES_ASIGNAR = ["admin","rrhh","coordinador","supervisor"];
 const PK_ROLES_CONFIG = ["admin","rrhh","coordinador"];
 const SIN_SUP = "__NONE__";   // valor del selector "personal sin supervisor"
 const SIN_FUNC = "__SIN__";   // valor del chip "sin asignar"
-const FUNC_PALETA = ["#3B82F6","#22C55E","#F5A623","#A78BFA","#22D3EE","#FF3B4E","#EC4899","#84CC16","#14B8A6","#F97316"];
+const FUNC_PALETA = ["#3B82F6","#22C55E","#F5A623","#A78BFA","#22D3EE","#EF4444","#EC4899","#84CC16","#14B8A6","#F97316"];
 let funcionesCat = [];        // catálogo completo (activas e inactivas), ordenado
 let funcionesError = null;
 const SIN_TURNO = "__SINTURNO__";
@@ -1824,7 +1947,7 @@ async function cargarFunciones(){
 }
 // Vacaciones y Falta no son una función de trabajo sino el motivo por el que alguien no trabaja ese día:
 // se muestran aparte (grupo "Ausencias" del desplegable, color propio y su propio indicador).
-const FUNC_AUSENCIA = { VACACIONES: "#3B82F6", FALTA: "#FF3B4E" };
+const FUNC_AUSENCIA = { VACACIONES: "#3B82F6", FALTA: "#EF4444" };
 const esAusencia = (nombre) => !!nombre && normArea(nombre).replace(/\s+/g, " ") in FUNC_AUSENCIA;
 function colorFunc(nombre){
   const clave = nombre ? normArea(nombre).replace(/\s+/g, " ") : "";
@@ -2027,15 +2150,15 @@ async function renderPicking(){
         <div class="pk-field grow pk-solo-reg"><label>Buscar</label><input type="text" id="pk-buscar" placeholder="Nombre, DNI, puesto, área o función…" value="${escHtml(pk.q)}"></div>
         <label class="pk-check pk-solo-reg"><input type="checkbox" id="pk-solo-sin" ${pk.soloSin ? "checked" : ""}>Solo sin asignar</label>
         <label class="pk-check" title="Muestra también al personal de áreas que no son de picking (Despacho, 3PL…), por ejemplo para prestar a alguien por un día."><input type="checkbox" id="pk-otras" ${pk.incluirOtras ? "checked" : ""}>Incluir otras áreas</label>
-        <button class="btn-sm pk-solo-reg" id="pk-copiar" type="button" disabled>📋 Copiar día anterior</button>
-        <button class="btn-sm pk-solo-reg" id="pk-exportar" type="button">⬇ Excel</button>
+        <button class="btn-sm pk-solo-reg" id="pk-copiar" type="button" disabled>${ic("copiar")}Copiar día anterior</button>
+        <button class="btn-sm pk-solo-reg" id="pk-exportar" type="button">${ic("entra")}Excel</button>
       </div>
       <p class="pk-nota" id="pk-nota"></p>
       <p class="pk-nota" id="pk-alcance" style="margin-top:4px;"></p>
     </div>
     <nav class="pk-subnav" id="pk-subnav">
-      <button type="button" data-v="ind">📊 Indicadores</button>
-      <button type="button" data-v="reg">📝 Registro <span class="pk-badge" id="pk-badge-sin" hidden></span></button>
+      <button type="button" data-v="ind">${ic("indicadores")}Indicadores</button>
+      <button type="button" data-v="reg">${ic("registro")}Registro <span class="pk-badge" id="pk-badge-sin" hidden></span></button>
     </nav>
 
     <!-- ===== Apartado INDICADORES: cómo va el día de un vistazo ===== -->
@@ -2106,7 +2229,7 @@ async function renderPicking(){
           <select id="pk-hd-dias" class="btn-sm">
             <option value="7">7 días</option><option value="14">14 días</option><option value="30">30 días</option>
           </select>
-          <button class="btn-sm" id="pk-hd-excel" type="button">⬇ Excel</button>
+          <button class="btn-sm" id="pk-hd-excel" type="button">${ic("entra")}Excel</button>
         </div>
       </div>
       <label class="pk-check" id="pk-hd-solo-wrap" hidden style="padding-bottom:10px;"><input type="checkbox" id="pk-hd-solo" ${pk.soloConAsig ? "checked" : ""}>Solo personas con función en el período</label>
@@ -2246,9 +2369,9 @@ function pintarPicking(){
   document.getElementById("pk-kpis").innerHTML =
     kpiTile("Colaboradores", vis.length, [pk.turno ? "turno " + pkEtiquetaTurno().toLowerCase() : "", pk.sup ? "de este supervisor" : (filtros.area || filtros.zona) ? etiquetaFiltro("") : ""].filter(Boolean).join(" · ") || "activos", "#3B82F6", "👥") +
     kpiTile("Con función", conF, pct + "% con registro", "#22C55E", "✅") +
-    kpiTile("Vacaciones / Falta", nVac + nFalta, `${nVac} vacaciones · ${nFalta} falta${nFalta === 1 ? "" : "s"}`, nFalta ? "#FF3B4E" : "#3B82F6", "🏖️") +
+    kpiTile("Vacaciones / Falta", nVac + nFalta, `${nVac} vacaciones · ${nFalta} falta${nFalta === 1 ? "" : "s"}`, nFalta ? "#EF4444" : "#3B82F6", "🏖️") +
     kpiTile("Sin asignar", sin, "falta definir su función", sin ? "#F5A623" : "#22C55E", "⏳") +
-    kpiTile("Presentes sin función", presSin, "ya marcaron ingreso", presSin ? "#FF3B4E" : "#22C55E", "⚠️");
+    kpiTile("Presentes sin función", presSin, "ya marcaron ingreso", presSin ? "#EF4444" : "#22C55E", "⚠️");
 
   // Franja resumen del Registro (para no perder el contexto al estar en ese apartado) y aviso de pendientes en su pestaña.
   const etiquetaFunc = pk.func === SIN_FUNC ? "Sin asignar" : pk.func;
@@ -2703,7 +2826,7 @@ function pintarCopiarPicking(){
   const btn = document.getElementById("pk-copiar"); if(!btn) return;
   const ant = pkFechaAnterior();
   btn.disabled = !pkEditable() || !ant;
-  btn.textContent = ant ? `📋 Copiar de ${fmtFecha(ant)}` : "📋 Copiar día anterior";
+  btn.innerHTML = ic("copiar") + (ant ? `Copiar de ${fmtFecha(ant)}` : "Copiar día anterior");
   btn.title = !pk.hist ? "Cargando historial…" : ant ? "Repite las funciones de ese día en quienes aún no tienen una (solo los que ves en la lista)" : "No hay asignaciones en los días anteriores";
 }
 async function copiarPickingAnterior(){
@@ -2967,12 +3090,12 @@ async function mvDescargarFormato(conPersonal){
 }
 const mvFormatoHtml = (conPersonal) => `
   <details class="pk-detalle" style="margin:0 0 14px;"><summary>Formato del archivo: ${MV_COLUMNAS_FORMATO.length} columnas</summary>
-    <div class="pk-chips" style="margin:10px 0 6px;">${MV_COLUMNAS_FORMATO.map((c, i) => `<span class="pk-chip" style="--c:${i < 2 ? "#FF3B4E" : "#9CA3AF"};cursor:default;"><i></i>${c}${i < 2 ? " <small>obligatoria</small>" : ""}</span>`).join("")}</div>
+    <div class="pk-chips" style="margin:10px 0 6px;">${MV_COLUMNAS_FORMATO.map((c, i) => `<span class="pk-chip" style="--c:${i < 2 ? "var(--accent)" : "#9CA3AF"};cursor:default;"><i></i>${c}${i < 2 ? " <small>obligatoria</small>" : ""}</span>`).join("")}</div>
     <p class="hint" style="margin:6px 0 0;">Es el mismo formato del Excel de ACTIVOS de RR.HH. Las celdas vacías no borran datos. Para dar de baja: ESTADO = CESADO con su MOTIVO DE CESE y F. CESE. El archivo descargado trae una hoja «Instrucciones».</p>
   </details>
   <div class="pk-controls" style="margin-bottom:14px;">
-    <button class="btn-sm" type="button" id="mv-fmt-vacio">⬇ Descargar el formato (vacío)</button>
-    ${conPersonal ? `<button class="btn-sm" type="button" id="mv-fmt-actual">⬇ Descargar el personal actual en este formato</button>` : ""}
+    <button class="btn-sm" type="button" id="mv-fmt-vacio">${ic("entra")}Descargar el formato (vacío)</button>
+    ${conPersonal ? `<button class="btn-sm" type="button" id="mv-fmt-actual">${ic("entra")}Descargar el personal actual en este formato</button>` : ""}
   </div>`;
 function mvEnlazarFormato(){
   document.getElementById("mv-fmt-vacio")?.addEventListener("click", () => mvDescargarFormato(false));
@@ -3102,8 +3225,8 @@ async function renderMovimientos(){
 
   panel.innerHTML = `
     <nav class="pk-subnav" id="mv-subnav">
-      ${puedeCargar ? `<button type="button" data-v="cargar">⬆ Cargar Excel</button>` : ""}
-      <button type="button" data-v="historial">📜 Historial de movimientos</button>
+      ${puedeCargar ? `<button type="button" data-v="cargar">${ic("sale")}Cargar Excel</button>` : ""}
+      <button type="button" data-v="historial">${ic("registro")}Historial de movimientos</button>
     </nav>
     <div id="mv-cargar" ${puedeCargar ? "" : "hidden"}>
       <div class="card">
@@ -3133,7 +3256,7 @@ async function renderMovimientos(){
             <option value="">Todos</option><option value="ALTA">Altas</option><option value="BAJA">Bajas (ceses y renuncias)</option><option value="REINGRESO">Reingresos</option>
             <option value="turno">Cambios de turno</option><option value="area">Cambios de área</option><option value="puesto">Cambios de puesto</option><option value="supervisor">Cambios de supervisor</option></select></div>
           <div class="pk-field grow"><label>Buscar</label><input type="text" id="mv-buscar" placeholder="Nombre, DNI, motivo o usuario…"></div>
-          <button class="btn-sm" id="mv-excel" type="button">⬇ Excel</button>
+          <button class="btn-sm" id="mv-excel" type="button">${ic("entra")}Excel</button>
         </div>
       </div>
       <div class="kpi-grid" id="mv-kpis"></div>
@@ -3204,7 +3327,7 @@ function mvPintarPreview(){
   const cont = document.getElementById("mv-preview"); if(!cont) return;
   if(mv.resultado){
     const r = mv.resultado;
-    cont.innerHTML = `<div class="card mv-ok"><h3>✅ Actualización aplicada al censo del ${fmtFecha(r.fecha)}</h3>
+    cont.innerHTML = `<div class="card mv-ok"><h3>Actualización aplicada al censo del ${fmtFecha(r.fecha)}</h3>
       <div class="pk-linea" style="margin-top:12px;"><span><b>${r.activos}</b>activos</span><span><b>${r.nuevos}</b>altas</span><span><b>${r.reingresos}</b>reingresos</span>
       <span><b>${r.cambios}</b>cambios</span><span class="${r.bajas ? "mal" : ""}"><b>${r.bajas}</b>bajas</span>${r.mantenidos ? `<span><b>${r.mantenidos}</b>se conservan activos</span>` : ""}</div>
       <p class="hint" style="margin:12px 0;">Ya está reflejado en Picking, Personal y el resto de pestañas. El detalle quedó en el historial.</p>
@@ -3217,16 +3340,16 @@ function mvPintarPreview(){
   const pctBajas = p.activosCenso ? Math.round(p.bajas.length / p.activosCenso * 100) : 0;
   const alerta = p.bajas.length >= 40 || pctBajas >= 12;
   const chips = [["cambios", "Cambios", p.cambios.length, "#F5A623"], ["nuevos", "Nuevos", p.nuevos.length, "#22C55E"], ["reingresos", "Reingresos", p.reingresos.length, "#3B82F6"],
-                 ["bajas", "Bajas propuestas", p.bajas.length, "#FF3B4E"], ["avisos", "Avisos del archivo", mv.avisos.length, "#7C8496"]];
+                 ["bajas", "Bajas propuestas", p.bajas.length, "#EF4444"], ["avisos", "Avisos del archivo", mv.avisos.length, "#7C8496"]];
   cont.innerHTML = `
     <div class="kpi-grid">
       ${kpiTile("En el archivo", p.activos.length, "personas activas", "#3B82F6", "📄")}
       ${kpiTile("Sin cambios", p.sinCambios, "ya estaban al día", "#22C55E", "✅")}
       ${kpiTile("Cambios", p.cambios.length, "turno · área · puesto · supervisor", "#F5A623", "🔁")}
       ${kpiTile("Nuevos / reingresos", p.nuevos.length + " / " + p.reingresos.length, "altas y regresos", "#A78BFA", "➕")}
-      ${kpiTile("Bajas propuestas", p.bajas.length, `${pctBajas}% del personal activo`, p.bajas.length ? "#FF3B4E" : "#22C55E", "📤")}
+      ${kpiTile("Bajas propuestas", p.bajas.length, `${pctBajas}% del personal activo`, p.bajas.length ? "#EF4444" : "#22C55E", "📤")}
     </div>
-    ${alerta ? `<div class="banner">⚠️ Se proponen <strong>${p.bajas.length} bajas (${pctBajas}% del personal activo)</strong>. Antes de aplicar revisa que el Excel esté completo: desmarca a quien siga trabajando y se conservará como activo.</div>` : ""}
+    ${alerta ? `<div class="banner">Se proponen <strong>${p.bajas.length} bajas (${pctBajas}% del personal activo)</strong>. Antes de aplicar revisa que el Excel esté completo: desmarca a quien siga trabajando y se conservará como activo.</div>` : ""}
     <div class="card">
       <div class="pk-chips" id="mv-chips">${chips.map(([k, l, n, c]) => `<button type="button" class="pk-chip${mv.detalle === k ? " on" : ""}" data-k="${k}" style="--c:${c};"><i></i>${l} <b>${n}</b></button>`).join("")}</div>
       <div id="mv-detalle" style="margin-top:14px;"></div>
@@ -3336,7 +3459,7 @@ async function mvAplicar(){
 }
 
 /* ---------- Historial ---------- */
-const MV_TIPO_INFO = { ALTA: ["Alta", "#22C55E"], BAJA: ["Baja", "#FF3B4E"], REINGRESO: ["Reingreso", "#3B82F6"], CAMBIO: ["Cambio", "#F5A623"] };
+const MV_TIPO_INFO = { ALTA: ["Alta", "#22C55E"], BAJA: ["Baja", "#EF4444"], REINGRESO: ["Reingreso", "#3B82F6"], CAMBIO: ["Cambio", "#F5A623"] };
 function mvFiltrados(){
   const q = mv.q.toLowerCase().trim();
   return mv.rows.filter(r => {
@@ -3352,7 +3475,7 @@ function mvPintarHistorial(){
   const cuenta = (f) => todas.filter(f).length;
   document.getElementById("mv-kpis").innerHTML =
     kpiTile("Altas", cuenta(r => r.tipo === "ALTA"), "ingresos nuevos", "#22C55E", "➕") +
-    kpiTile("Bajas", cuenta(r => r.tipo === "BAJA"), "ceses y renuncias", "#FF3B4E", "📤") +
+    kpiTile("Bajas", cuenta(r => r.tipo === "BAJA"), "ceses y renuncias", "#EF4444", "📤") +
     kpiTile("Reingresos", cuenta(r => r.tipo === "REINGRESO"), "regresaron", "#3B82F6", "↩️") +
     kpiTile("Cambios de turno", cuenta(r => r.tipo === "CAMBIO" && r.campo === "turno"), "rotación de turno", "#F5A623", "🌓") +
     kpiTile("Cambios de área", cuenta(r => r.tipo === "CAMBIO" && r.campo === "area"), "rotación de área", "#A78BFA", "🔀") +
@@ -3385,7 +3508,9 @@ async function iniciarApp(){
   document.getElementById("app").classList.add("show");
   document.getElementById("user-nombre").textContent = session.nombre || session.username || "—";
   document.getElementById("user-rol").textContent = ROLE_LABELS[session.rol] || session.rol || "—";
+  document.getElementById("user-av").textContent = iniciales(session.nombre || session.username || "");
   document.getElementById("tab-config").hidden = !PK_ROLES_CONFIG.includes(session.rol);
+  document.getElementById("grp-sistema").hidden = document.getElementById("tab-config").hidden;
   document.getElementById("tab-movimientos").hidden = !MV_ROLES_VER.includes(session.rol);
   await Promise.all([cargarAreas(), cargarZonas()]);
   renderTabActivo();

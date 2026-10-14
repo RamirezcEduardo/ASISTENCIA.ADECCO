@@ -1,4 +1,4 @@
-# App móvil (ADECCO Asistencia)
+# App móvil (Control de Asistencia)
 
 Empaqueta la misma app web (`../index.html`) como app Android nativa usando
 [Capacitor](https://capacitorjs.com), para instalarla directo en las tablets
@@ -10,7 +10,7 @@ cada vez).
 GitHub Actions lo compila solo en cada push a `main` que toque `mobile/**` o
 `index.html` (ver `.github/workflows/build-apk.yml`). El `.apk` queda como
 artefacto descargable en la pestaña **Actions** del run correspondiente
-(`asistencia-adecco-debug`).
+(`asistencia-debug`).
 
 También se puede compilar localmente (requiere Android Studio / Android SDK):
 
@@ -19,6 +19,7 @@ cd mobile
 npm install
 cp ../index.html www/index.html   # sincroniza la app web más reciente
 cp ../manifest.json www/manifest.json
+cp ../marca.config.js ../marca.js ../marca.css www/
 cp -r ../icons www/icons
 npx cap sync android
 npx cap open android              # abre en Android Studio, o:
@@ -49,7 +50,7 @@ Esto es independiente de (y se suma a) la función nativa de Android "Fijar
 pantalla" con PIN — ver la guía de configuración de la tablet. Si algún
 día la tablet queda pillada sin poder salir (clave olvidada), la única
 salida de emergencia es forzar el cierre de la app desde
-Ajustes → Apps → ADECCO Asistencia → Forzar detención (requiere el PIN de
+Ajustes → Apps → Control de Asistencia → Forzar detención (requiere el PIN de
 Android de la tablet, no el de la app).
 
 ## Firma de debug fija
