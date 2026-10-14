@@ -102,7 +102,7 @@
   }
 
   /* ============ Shell: menu lateral + contenido ============ */
-  #app{display:none;height:100vh;}
+  #app{display:none;height:100vh;height:100dvh;}
   #app.show{display:grid;grid-template-columns:var(--side-w) minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr);
     grid-template-areas:"side head" "side filter" "side main";}
 
@@ -410,6 +410,13 @@
   .cfg-area input{accent-color:var(--accent);}
 
   /* ============ Tablet y celular: el menu lateral pasa a barra horizontal y nada se sale de la pantalla ============ */
+  /* Tablet horizontal de poca altura: el menu lateral se compacta para entrar sin desplazarse */
+  @media (min-width:901px) and (max-height:660px){
+    nav#tabs{padding:10px 10px;}
+    .side-brand{padding-bottom:6px;}
+    .nav-grupo{padding:9px 10px 4px;}
+    nav#tabs button{padding:7px 11px;}
+  }
   @media (max-width:900px){
     #app.show{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto minmax(0,1fr);grid-template-areas:"head" "side" "filter" "main";}
     header{padding:0 14px;height:56px;gap:10px;}

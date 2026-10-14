@@ -1,9 +1,14 @@
 package com.adecco.asistencia;
 
 import android.app.AlertDialog;
+import android.os.Bundle;
 import android.text.InputType;
+import android.view.View;
 import android.widget.EditText;
 import android.widget.Toast;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import com.getcapacitor.BridgeActivity;
 
 /**
@@ -14,6 +19,23 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
 
     private static final String CLAVE_SALIDA = "adecco2026";
+
+    /**
+     * Android 15+ dibuja la app DEBAJO de la barra de estado y de la barra de navegacion (borde a borde), y el
+     * WebView de muchas tablets no informa esos margenes a la pagina: el texto del pie y los botones de abajo
+     * quedaban tapados por los botones de Atras/Inicio. Aqui se deja el contenido DENTRO del area libre.
+     */
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        View contenido = findViewById(android.R.id.content);
+        ViewCompat.setOnApplyWindowInsetsListener(contenido, (v, insets) -> {
+            Insets barras = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+            v.setPadding(barras.left, barras.top, barras.right, barras.bottom);
+            return WindowInsetsCompat.CONSUMED;
+        });
+        ViewCompat.requestApplyInsets(contenido);
+    }
 
     @Override
     public void onResume() {
