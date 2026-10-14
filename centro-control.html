@@ -12,6 +12,9 @@
      "parpadee" el tema oscuro al cargar si el usuario ya lo eligio antes. */
   try{
     if(localStorage.getItem("control-theme") === "dark") document.documentElement.setAttribute("data-theme","dark");
+    /* Con una sesion guardada se muestra una pantalla de carga (no el login) mientras se valida: al actualizar la pagina
+       el login aparecia unos segundos y luego saltaba al panel. */
+    if(localStorage.getItem("asis-control-token")) document.documentElement.classList.add("recuperando");
   }catch(e){}
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -87,6 +90,11 @@
   .login-card button:disabled{opacity:.55;}
   .login-error{margin-top:14px;font-size:12.5px;color:var(--red);background:var(--red-tint);border-radius:9px;padding:9px 12px;display:none;}
   .login-error.show{display:block;}
+  #boot{position:fixed;inset:0;z-index:60;display:none;flex-direction:column;align-items:center;justify-content:center;gap:22px;background:var(--bg);--logo-size:56px;}
+  html.recuperando #boot{display:flex;}
+  html.recuperando #login-screen{display:none!important;}
+  .boot-spin{width:26px;height:26px;border-radius:50%;border:3px solid var(--border);border-top-color:var(--accent);animation:boot-giro .8s linear infinite;}
+  @keyframes boot-giro{to{transform:rotate(360deg);}}
   @media (max-width:900px){
     #login-screen{grid-template-columns:minmax(0,1fr);}
     .login-hero{display:none;}
@@ -436,6 +444,8 @@
 </head>
 <body>
 
+<div id="boot" role="status" aria-label="Cargando"><span data-marca-logo></span><div class="boot-spin"></div></div>
+
 <div id="login-screen">
   <aside class="login-hero">
     <div class="hero-brand"><span data-marca-logo></span><span data-marca="producto"></span></div>
@@ -685,7 +695,9 @@ async function intentarSesionGuardada(){
   if(!token) return false;
   const { data, error } = await sb.rpc("b2c_sesion_actual", { p_token: token });
   if(error || !data || !(data.permisos || []).includes("view.asistencia")){
-    try{ localStorage.removeItem(SESSION_KEY); }catch(e){}
+    // Si fue un corte de red (no una respuesta del servidor) se conserva la sesion para reintentar al actualizar.
+    const sinRed = error && /fetch|network|timeout|failed to/i.test(String(error.message || error));
+    if(!sinRed){ try{ localStorage.removeItem(SESSION_KEY); }catch(e){} }
     return false;
   }
   session = aplanarSesion(token, data);
@@ -3517,7 +3529,11 @@ async function iniciarApp(){
 }
 
 (async function main(){
-  if(await intentarSesionGuardada()) await iniciarApp();
+  // Tope de seguridad: si la validacion se cuelga, se muestra el login en vez de dejar la pantalla de carga para siempre.
+  const tope = setTimeout(() => document.documentElement.classList.remove("recuperando"), 10000);
+  try{ if(await intentarSesionGuardada()) await iniciarApp(); }
+  catch(e){ console.error(e); }
+  finally{ clearTimeout(tope); document.documentElement.classList.remove("recuperando"); }
 })();
 </script>
 </body>
