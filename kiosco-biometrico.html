@@ -158,9 +158,10 @@
   #cam-unit{position:absolute;inset:0;border-radius:26px;overflow:hidden;background:#05060a;
     box-shadow:0 0 0 1px rgba(255,255,255,.1), 0 20px 50px -12px rgba(0,0,0,.6);}
   #cam-unit video, #cam-unit canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);}
-  /* El icono de 'reproducir' que el WebView de Android pinta mientras arranca la camara se evita con el atributo poster
-     (transparente) del <video>; el video nunca se oculta con CSS porque asi el WebView puede dejar de entregar cuadros. */
-  #cam-unit video::-webkit-media-controls,#cam-unit video::-webkit-media-controls-start-playback-button,#cam-unit video::-webkit-media-controls-overlay-play-button{display:none!important;-webkit-appearance:none;}
+  /* El WebView de Android pinta un icono de 'reproducir' sobre el <video> mientras la camara arranca. NO se toca el video
+     (ni poster ni opacidad: en algunas tablets eso impedia que se mostrara la camara); se tapa con esta cubierta mientras carga. */
+  #cam-unit .cam-cover{position:absolute;inset:0;z-index:1;display:none;align-items:center;justify-content:center;background:#05060a;color:#7C8496;font-size:13px;font-weight:600;}
+  #cam-unit.cargando .cam-cover{display:flex;}
 
   /* Silueta guía de rostro -- capa puramente visual encima del video, no
      interviene en el reconocimiento (face-api.js lee el <video> directo). */
@@ -169,6 +170,8 @@
   #face-oval{fill:none;stroke-width:2.5;transition:stroke .15s ease;}
 
   .scan-hint-row{display:flex;align-items:center;justify-content:center;gap:10px;}
+  .scan-diag{min-height:14px;font-size:11px;color:#7C8496;text-align:center;font-family:'IBM Plex Mono',monospace;max-width:80vw;}
+  .scan-retry{flex:none;min-width:200px;padding:13px 22px;}
   .scan-hint{color:#fff;font-size:15.5px;font-weight:700;text-align:center;min-height:22px;}
   .scan-dot{width:8px;height:8px;border-radius:50%;background:var(--red);animation:blink 1.1s infinite;flex-shrink:0;}
 
@@ -297,8 +300,10 @@
     </button>
   </div>
   <div class="scan-body" id="scan-body">
-    <div class="cam-frame-wrap"><div id="cam-unit"><video id="video" autoplay muted playsinline disablepictureinpicture poster="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"></video><canvas id="overlay-canvas"></canvas><div class="face-guide"><svg viewBox="0 0 200 260"><ellipse id="face-oval" cx="100" cy="130" rx="72" ry="105" stroke="rgba(255,255,255,.55)" stroke-dasharray="6 7"/></svg></div></div></div>
+    <div class="cam-frame-wrap"><div id="cam-unit" class="cargando"><video id="video" autoplay muted playsinline></video><canvas id="overlay-canvas"></canvas><div class="cam-cover"><span>Iniciando cámara…</span></div><div class="face-guide"><svg viewBox="0 0 200 260"><ellipse id="face-oval" cx="100" cy="130" rx="72" ry="105" stroke="rgba(255,255,255,.55)" stroke-dasharray="6 7"/></svg></div></div></div>
     <div class="scan-hint-row"><span class="scan-dot"></span><span class="scan-hint" id="scan-hint">Mira a la cámara…</span></div>
+    <div class="scan-diag" id="scan-diag"></div>
+    <button class="btn btn-primary scan-retry" id="btn-scan-retry" type="button" hidden>Reintentar cámara</button>
     <div class="result-card" id="result-card" hidden>
       <h2 id="result-nombre">—</h2>
       <p id="result-meta">—</p>
@@ -426,6 +431,8 @@ const scanBody = document.getElementById("scan-body");
 const overlayCanvas = document.getElementById("overlay-canvas");
 const scanView = document.getElementById("scan-view");
 const scanHint = document.getElementById("scan-hint");
+const scanDiag = document.getElementById("scan-diag");
+const scanRetryBtn = document.getElementById("btn-scan-retry");
 const accionTag = document.getElementById("accion-tag");
 const clockEl = document.getElementById("clock");
 const resultCard = document.getElementById("result-card");
@@ -555,10 +562,26 @@ async function iniciarCamara(){
   try{ await video.play(); }catch(e){ /* autoplay ya la inicia; algunos WebView exigen el play() explicito */ }
   overlayCanvas.width = video.videoWidth;
   overlayCanvas.height = video.videoHeight;
+  // Se retira la cubierta cuando llega el primer cuadro (o, a lo mucho, 1,5 s despues).
+  await new Promise(res => {
+    const t = setTimeout(res, 1500);
+    if(video.requestVideoFrameCallback) video.requestVideoFrameCallback(() => { clearTimeout(t); res(); });
+  });
+  camUnit.classList.remove("cargando");
+}
+// Texto claro para el personal de piso segun por que fallo la camara.
+function mensajeCamara(err){
+  const n = err && err.name;
+  if(n === "NotAllowedError" || n === "PermissionDeniedError" || n === "SecurityError")
+    return "La app no tiene permiso para usar la cámara. Ajustes → Apps → Control de Asistencia → Permisos → Cámara → Permitir.";
+  if(n === "NotFoundError" || n === "DevicesNotFoundError") return "No se encontró ninguna cámara en este dispositivo.";
+  if(n === "NotReadableError" || n === "AbortError" || n === "TrackStartError") return "La cámara está en uso por otra app. Ciérrala y vuelve a intentar.";
+  return "No se pudo iniciar la cámara: " + (err && err.message ? err.message : err);
 }
 function detenerCamara(){
   if(camaraStream){ camaraStream.getTracks().forEach(t => t.stop()); camaraStream = null; }
   video.srcObject = null;
+  camUnit.classList.add("cargando");
 }
 
 async function detectarUnaVez(){
@@ -595,6 +618,7 @@ async function abrirScan(accion){
   camFrameWrap.appendChild(camUnit); // por si quedo movido dentro del modal de enrolamiento
   camUnit.hidden = false;
   camFrameWrap.hidden = false;
+  scanRetryBtn.hidden = true; scanDiag.textContent = "";
   dibujarCaja(null); // el oval guia no debe arrastrar el verde/rojo del intento anterior
   setHint(modelosListos ? "Mira a la cámara para identificarte…" : "Cargando modelos…");
   scanView.classList.add("show");
@@ -611,9 +635,12 @@ async function abrirScan(accion){
     dibujarCaja(null); // óvalo guía limpio (por si quedó en rojo/verde de un intento anterior)
   }catch(err){
     console.error(err);
-    setHint("No se pudo iniciar: " + (err && err.message ? err.message : err));
+    setHint(mensajeCamara(err));
+    scanDiag.textContent = "Detalle: " + ((err && err.name) || "error") + (err && err.message ? " · " + err.message : "");
+    scanRetryBtn.hidden = false;
     return;
   }
+  scanDiag.textContent = "Cámara " + video.videoWidth + "×" + video.videoHeight;
   setHint("Mira a la cámara para identificarte…");
   scanning = true;
   loopReconocer();
@@ -775,6 +802,7 @@ document.getElementById("btn-home-ingreso").addEventListener("click", () => abri
 document.getElementById("btn-home-almuerzo").addEventListener("click", () => abrirScan("almuerzo"));
 document.getElementById("btn-home-salida").addEventListener("click", () => abrirScan("salida"));
 document.getElementById("btn-scan-cancel").addEventListener("click", volverAInicio);
+scanRetryBtn.addEventListener("click", () => { if(accionActual) abrirScan(accionActual); });
 
 /* ---------------- Registro biometrico (enrolamiento) ---------------- */
 const enrollModal = document.getElementById("enroll-modal");
@@ -829,7 +857,7 @@ enrollBuscarBtn.addEventListener("click", async () => {
     enrollCapturarBtn.disabled = false;
   }catch(err){
     console.error(err);
-    enrollInfo.textContent = empleadoLabel + " · No se pudo iniciar la cámara: " + (err && err.message ? err.message : err);
+    enrollInfo.textContent = empleadoLabel + " · " + mensajeCamara(err);
   }
 });
 

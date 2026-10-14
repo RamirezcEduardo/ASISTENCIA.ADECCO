@@ -1,12 +1,15 @@
 package com.adecco.asistencia;
 
+import android.Manifest;
 import android.app.AlertDialog;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.Toast;
 import androidx.activity.OnBackPressedCallback;
+import androidx.annotation.NonNull;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -21,7 +24,12 @@ public class MainActivity extends BridgeActivity {
 
     private static final String CLAVE_SALIDA = "adecco2026";
 
+    private static final int PEDIDO_CAMARA = 4711;
+
     private AlertDialog dialogoClave = null;
+    // El permiso de camara se pide ANTES de fijar la pantalla: con la app fijada Android no deja mostrar el cuadro de
+    // permisos, y sin permiso la camara se quedaba en negro (por ejemplo tras reinstalar la app).
+    private boolean esperandoPermiso = false;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -42,6 +50,11 @@ public class MainActivity extends BridgeActivity {
         });
         ViewCompat.requestApplyInsets(contenido);
 
+        if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            esperandoPermiso = true;
+            requestPermissions(new String[] { Manifest.permission.CAMERA }, PEDIDO_CAMARA);
+        }
+
         // Con Android 16 (targetSdk 36) el gesto/botón Atrás ya no llama a onBackPressed(): se atiende por el
         // despachador de Atrás, así la clave de salida se pide en cualquier versión de Android.
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
@@ -55,6 +68,19 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onResume() {
         super.onResume();
+        if (!esperandoPermiso) fijarPantalla();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == PEDIDO_CAMARA) {
+            esperandoPermiso = false;
+            fijarPantalla();
+        }
+    }
+
+    private void fijarPantalla() {
         try {
             startLockTask();
         } catch (Exception e) {
