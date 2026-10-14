@@ -29,6 +29,9 @@ jobs:
 
       - name: Configurar Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # El paquete 'tools' (por defecto de la accion) ya no existe en el repositorio de Android y hacia fallar el paso.
+          packages: platform-tools
 
       - name: Configurar Node
         uses: actions/setup-node@v4

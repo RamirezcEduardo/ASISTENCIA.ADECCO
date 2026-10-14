@@ -155,6 +155,11 @@
   #cam-unit{position:absolute;inset:0;border-radius:26px;overflow:hidden;background:#05060a;
     box-shadow:0 0 0 1px rgba(255,255,255,.1), 0 20px 50px -12px rgba(0,0,0,.6);}
   #cam-unit video, #cam-unit canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);}
+  /* El WebView de Android pinta un icono de 'reproducir' como poster mientras la camara arranca: el video queda
+     invisible hasta que entrega su primer cuadro (clase .live) y se ocultan los controles nativos. */
+  #cam-unit video{opacity:0;transition:opacity .25s ease;}
+  #cam-unit video.live{opacity:1;}
+  #cam-unit video::-webkit-media-controls,#cam-unit video::-webkit-media-controls-start-playback-button,#cam-unit video::-webkit-media-controls-overlay-play-button{display:none!important;-webkit-appearance:none;}
 
   /* Silueta guía de rostro -- capa puramente visual encima del video, no
      interviene en el reconocimiento (face-api.js lee el <video> directo). */
@@ -290,7 +295,7 @@
     </button>
   </div>
   <div class="scan-body" id="scan-body">
-    <div class="cam-frame-wrap"><div id="cam-unit"><video id="video" autoplay muted playsinline></video><canvas id="overlay-canvas"></canvas><div class="face-guide"><svg viewBox="0 0 200 260"><ellipse id="face-oval" cx="100" cy="130" rx="72" ry="105" stroke="rgba(255,255,255,.55)" stroke-dasharray="6 7"/></svg></div></div></div>
+    <div class="cam-frame-wrap"><div id="cam-unit"><video id="video" autoplay muted playsinline disablepictureinpicture poster="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"></video><canvas id="overlay-canvas"></canvas><div class="face-guide"><svg viewBox="0 0 200 260"><ellipse id="face-oval" cx="100" cy="130" rx="72" ry="105" stroke="rgba(255,255,255,.55)" stroke-dasharray="6 7"/></svg></div></div></div>
     <div class="scan-hint-row"><span class="scan-dot"></span><span class="scan-hint" id="scan-hint">Mira a la cámara…</span></div>
     <div class="result-card" id="result-card" hidden>
       <h2 id="result-nombre">—</h2>
@@ -413,6 +418,7 @@ function dentroDeVentana(turno){
 }
 
 const video = document.getElementById("video");
+video.addEventListener("playing", () => video.classList.add("live"));
 const camUnit = document.getElementById("cam-unit");
 const camFrameWrap = document.querySelector(".cam-frame-wrap");
 const scanBody = document.getElementById("scan-body");
@@ -523,6 +529,7 @@ async function iniciarCamara(){
 function detenerCamara(){
   if(camaraStream){ camaraStream.getTracks().forEach(t => t.stop()); camaraStream = null; }
   video.srcObject = null;
+  video.classList.remove("live");
 }
 
 async function detectarUnaVez(){
@@ -557,6 +564,7 @@ async function abrirScan(accion){
   camFrameWrap.appendChild(camUnit); // por si quedo movido dentro del modal de enrolamiento
   camUnit.hidden = false;
   camFrameWrap.hidden = false;
+  dibujarCaja(null); // el oval guia no debe arrastrar el verde/rojo del intento anterior
   setHint(modelosListos ? "Mira a la cámara para identificarte…" : "Cargando modelos…");
   scanView.classList.add("show");
   stableDni = null; stableCount = 0;
