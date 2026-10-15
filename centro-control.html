@@ -408,6 +408,13 @@
   .cfg-area:has(input:checked){border-color:var(--accent);background:var(--accent-tint);font-weight:700;}
   .cfg-area small{margin-left:auto;font-family:var(--mono);color:var(--muted);}
   .cfg-area input{accent-color:var(--accent);}
+  .sup-reglas input,.sup-reglas select{background:var(--panel-alt);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:7px 10px;font-size:12.5px;width:100%;min-width:130px;}
+  .sup-reglas td{padding:6px 8px;}
+  .sup-ayuda{margin:10px 0 0;font-size:12px;color:var(--muted);line-height:1.5;}
+  .pk-cruce{color:var(--amber);font-weight:600;}
+  .pk-cruce a{color:var(--accent-text);font-weight:700;cursor:pointer;text-decoration:underline;}
+  .pk-cruce-tag{color:var(--amber);font-weight:800;cursor:help;}
+  .cruce-sug{font-weight:700;color:var(--accent-text);}
 
   /* ============ Tablet y celular: el menu lateral pasa a barra horizontal y nada se sale de la pantalla ============ */
   /* Tablet horizontal de poca altura: el menu lateral se compacta para entrar sin desplazarse */
@@ -1814,6 +1821,16 @@ async function guardarPersonalModal(){
       await renderPersonal();
       return;
     }
+    // Si cambió de turno o de área, su supervisor pasa al que corresponde según Configuración (evita quedar "cruzado").
+    if(document.getElementById("pm-estado").value === "ACTIVO" && supReglas.length){
+      const esp = supervisorQueCorresponde(document.getElementById("pm-area").value.trim(), document.getElementById("pm-turno").value);
+      if(esp){
+        try{
+          const r = await rpc("asis_supervisor_corregir", { p_cambios: [{ dni, supervisor: esp }] });
+          if(r && r.corregidos) toast(`Supervisor actualizado a ${esp} según Configuración`);
+        }catch(es){ /* sin la migración 0017 o sin permiso: el guardado principal ya se hizo */ }
+      }
+    }
     cerrarPersonalModal();
     await renderPersonal();
   }catch(e){
@@ -1983,6 +2000,35 @@ function mismoNombre(a, b){
   const [corto, largo] = A.length <= B.length ? [A, B] : [B, A];
   return corto.every(t => largo.includes(t));
 }
+/* ================= Supervisores por turno y área =================
+   Reglas (Configuración): qué supervisor corresponde a cada combinación turno + área. Sirven para detectar al personal
+   "cruzado" (p. ej. gente de Mezzanine tarde con el supervisor de noche), corregirlo con un clic y asignar al supervisor
+   correcto cuando alguien cambia de turno/área o se carga el Excel de RR.HH. */
+let supReglas = [];          // [{supervisor, turno, area}]
+let supReglasError = null;
+async function cargarSupReglas(){
+  try{ supReglas = (await rpc("asis_supervisor_reglas_listar", {})) || []; supReglasError = null; }
+  catch(e){ supReglas = []; supReglasError = e; }
+}
+const SUP_TURNOS = [["MAÑANA", "Mañana"], ["TARDE", "Tarde"], ["NOCHE", "Noche"]];
+// Mezanine / Mezzanine (y las demás variantes de zona) cuentan como la misma área.
+const claveAreaSup = (a) => zonaDeArea(a) || normArea(a);
+// Supervisor que le corresponde a (área, turno) según las reglas; null si no hay regla o si hay dos supervisores distintos (ambiguo).
+function supervisorQueCorresponde(area, turno, reglas = supReglas){
+  const t = normNombre(turno), a = claveAreaSup(area);
+  if(!t || !a) return null;
+  const vistos = new Map();
+  reglas.forEach(r => { if(normNombre(r.turno) === t && claveAreaSup(r.area) === a){ const k = normNombre(r.supervisor); if(k && !vistos.has(k)) vistos.set(k, r.supervisor); } });
+  return vistos.size === 1 ? [...vistos.values()][0] : null;
+}
+// Devuelve el supervisor que le correspondería si el actual no es ese (cruce); null si está bien o no hay regla.
+function cruceSupervisor(p){
+  if(!supReglas.length) return null;
+  const esp = supervisorQueCorresponde(p.area, p.turno);
+  return esp && !mismoNombre(esp, p.supervisor || "") ? esp : null;
+}
+function irAConfiguracion(){ const b = document.querySelector('#tabs [data-tab="config"]'); if(b) b.click(); }
+
 function pkEditable(){
   const hoy = todayISO();
   return PK_ROLES_ASIGNAR.includes(session.rol) && pk.fecha >= addDays(hoy, -14) && pk.fecha <= addDays(hoy, 1) && funcionesCat.some(f => f.activo);
@@ -2376,6 +2422,8 @@ function pintarPicking(){
   document.getElementById("pk-alcance").innerHTML = pk.incluirOtras
     ? "Mostrando <strong>todas las áreas</strong>. Desmarca «Incluir otras áreas» para ver solo las de picking."
     : `Áreas de picking: <strong>${escHtml(pkAreasTexto())}</strong>${fuera ? ` · hay ${fuera} personas de otras áreas que no se listan` : ""}. ${PK_ROLES_CONFIG.includes(session.rol) ? "Puedes cambiar las áreas en Configuración." : ""}`;
+  const nCruces = pk.filas.filter(p => cruceSupervisor(p)).length;
+  if(nCruces) document.getElementById("pk-alcance").innerHTML += ` <span class="pk-cruce">⚠ ${nCruces} ${nCruces === 1 ? "persona tiene" : "personas tienen"} un supervisor distinto al configurado para su turno y área${PK_ROLES_CONFIG.includes(session.rol) ? ` — <a onclick="irAConfiguracion()">revisar en Configuración</a>` : ""}.</span>`;
 
   // KPIs
   // Con función = trabaja en algo; Vacaciones/Falta se cuentan aparte; Sin asignar = todavía no se registró nada.
@@ -2430,13 +2478,14 @@ function pintarPicking(){
       </tr></thead><tbody>${filasTabla.map(p => {
         const c = p.funcion ? colorFunc(p.funcion) : "";
         const quien = p.funcion && p.asignado_por ? `Asignado por ${p.asignado_por}${p.asignado_en ? " · " + fmtHora(p.asignado_en) : ""}` : "";
+        const espSup = cruceSupervisor(p);
         return `<tr class="${!p.funcion ? (p.ingreso ? "presente-sin" : "sin-func") : ""}">
           ${editable ? `<td><input type="checkbox" class="pk-chk" data-dni="${escHtml(p.dni)}" ${pk.sel.has(p.dni) ? "checked" : ""}></td>` : ""}
           <td><div class="pk-nombre">${avatarHtml(p.nombre)}<span>${escHtml(p.nombre)}<small>${escHtml(p.dni)}</small></span></div></td>
           <td class="meta">${escHtml(p.puesto) || "—"}</td>
           <td class="meta">${escHtml([p.area, p.turno].filter(Boolean).join(" · ")) || "—"}</td>
           <td>${zonasBadges(p.dni)}</td>
-          <td class="meta">${escHtml(p.supervisor) || "—"}</td>
+          <td class="meta">${escHtml(p.supervisor) || "—"}${espSup ? ` <span class="pk-cruce-tag" title="Según Configuración le corresponde: ${escHtml(espSup)}">⚠</span>` : ""}</td>
           <td>${p.ingreso ? celdaHora(p.ingreso, "ingreso") : `<span class="hora-pendiente">—</span>`}</td>
           <td>${editable
             ? `<select class="pk-sel${p.funcion ? "" : " vacio"}" data-dni="${escHtml(p.dni)}" style="--c:${c || "var(--border)"};" title="${escHtml(quien)}">${opts(p.funcion)}</select>`
@@ -2898,8 +2947,9 @@ async function renderConfig(){
     return;
   }
   panel.innerHTML = `<div class="loading">Cargando…</div>`;
-  const [ok] = await Promise.all([cargarFunciones(), cargarAreasCfg()]);
+  const [ok] = await Promise.all([cargarFunciones(), cargarAreasCfg(), cargarSupReglas()]);
   if(gen !== renderGen) return;
+  cfgSup.borrador = supReglas.map(r => ({ ...r }));
   if(!ok){
     panel.innerHTML = migracion0013Faltante(funcionesError) ? bannerMigracion0013() : `<div class="loading">Error: ${escHtml(humanError(funcionesError))}</div>`;
     return;
@@ -2908,7 +2958,8 @@ async function renderConfig(){
 }
 
 // Áreas del censo (con cuántos activos tiene cada una) y cuáles están marcadas como "de picking".
-const cfgAreas = { error: null, guardadas: [], conteo: [] };
+const cfgAreas = { error: null, guardadas: [], conteo: [], personal: [] };
+const cfgSup = { borrador: [] };
 async function cargarAreasCfg(){
   cfgAreas.error = null;
   try{ cfgAreas.guardadas = (await rpc("asis_picking_areas_listar", {})) || []; }
@@ -2916,6 +2967,7 @@ async function cargarAreasCfg(){
   try{
     const dia = (await rpc("asis_picking_dia", { p_fecha: todayISO() })) || [];
     const m = new Map();
+    cfgAreas.personal = dia;
     dia.forEach(p => { const k = normArea(p.area); if(!k) return; const e = m.get(k) || { key: k, label: String(p.area).trim(), n: 0 }; e.n++; m.set(k, e); });
     cfgAreas.conteo = [...m.values()];
   }catch(e){ cfgAreas.conteo = []; }
@@ -2959,6 +3011,99 @@ function enlazarAreasCfg(){
     if(confirm("¿Volver a usar solo Mezzanine, Estantería y Knapp?")) guardar([], "Se restablecieron las zonas por defecto");
   });
 }
+const bannerMigracion0017 = () => `<div class="banner" style="margin-top:10px;">Falta aplicar la migración <strong>0017_asis_supervisor_reglas.sql</strong> en Supabase (SQL Editor → pegar el archivo completo → Run). Después recarga esta página.</div>`;
+function cfgSupHtml(){
+  if(supReglasError){
+    return `<div class="card"><h3>Supervisores por turno y área</h3>${migracion0013Faltante(supReglasError) ? bannerMigracion0017() : `<div class="loading">Error: ${escHtml(humanError(supReglasError))}</div>`}</div>`;
+  }
+  // Supervisores conocidos (del censo de hoy y de las reglas) para autocompletar, con cuánta gente tiene cada uno.
+  const sups = new Map();
+  (cfgAreas.personal || []).forEach(p => { const k = normNombre(p.supervisor); if(!k) return; const e = sups.get(k) || { label: String(p.supervisor).trim(), n: 0 }; e.n++; sups.set(k, e); });
+  cfgSup.borrador.forEach(r => { const k = normNombre(r.supervisor); if(k && !sups.has(k)) sups.set(k, { label: r.supervisor, n: 0 }); });
+  const listaSups = [...sups.values()].sort((a, b) => a.label.localeCompare(b.label, "es"));
+  // Áreas del censo (con su personal) más las ya usadas en reglas.
+  const areas = cfgAreas.conteo.map(c => ({ label: c.label, n: c.n }));
+  cfgSup.borrador.forEach(r => { if(r.area && !areas.some(a => claveAreaSup(a.label) === claveAreaSup(r.area))) areas.push({ label: r.area, n: 0 }); });
+  const puede = PK_ROLES_CONFIG.includes(session.rol);
+  const optArea = (sel) => `<option value="">Elige el área…</option>` + areas.map(a => `<option value="${escHtml(a.label)}" ${claveAreaSup(a.label) === claveAreaSup(sel) ? "selected" : ""}>${escHtml(a.label)}${a.n ? ` (${a.n})` : ""}</option>`).join("");
+  const optTurno = (sel) => `<option value="">Elige el turno…</option>` + SUP_TURNOS.map(([v, l]) => `<option value="${v}" ${normNombre(sel) === normNombre(v) ? "selected" : ""}>${l}</option>`).join("");
+  return `<div class="card sup-reglas" id="cfg-sup">
+    <h3>Supervisores por turno y área</h3>
+    <p class="hint">Define qué supervisor corresponde a cada turno y área. Con esto se detecta al personal «cruzado» (por ejemplo, gente de Mezzanine tarde con el supervisor de noche) y se corrige con un clic; además, al cambiar a alguien de turno o área, y al cargar el Excel de RR.HH., se le asigna el supervisor que corresponde.</p>
+    <datalist id="sup-lista">${listaSups.map(x => `<option value="${escHtml(x.label)}">${x.n ? x.n + " personas" : ""}</option>`).join("")}</datalist>
+    <div class="table-scroll" style="max-height:420px;"><table><thead><tr><th>Supervisor</th><th>Turno</th><th>Área</th><th></th></tr></thead>
+      <tbody id="sup-filas">${cfgSup.borrador.map((r, i) => `<tr data-i="${i}">
+        <td><input type="text" class="sup-in" list="sup-lista" value="${escHtml(r.supervisor)}" placeholder="Apellidos y nombres" ${puede ? "" : "disabled"}></td>
+        <td><select class="sup-turno" ${puede ? "" : "disabled"}>${optTurno(r.turno)}</select></td>
+        <td><select class="sup-area" ${puede ? "" : "disabled"}>${optArea(r.area)}</select></td>
+        <td>${puede ? `<button class="btn-sm sup-quitar" type="button" title="Quitar esta regla">✕</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="4"><div class="feed-empty">Todavía no hay reglas. Agrega la primera.</div></td></tr>`}</tbody></table></div>
+    ${puede ? `<div class="cfg-add" style="margin:14px 0 0;">
+      <button class="btn-sm" id="sup-agregar" type="button">+ Agregar regla</button>
+      <button class="btn-sm primary" id="sup-guardar" type="button">Guardar reglas</button>
+    </div>
+    <p class="sup-ayuda">Una fila = «este supervisor cubre este turno en esta área». Un supervisor puede tener varias filas (por ejemplo, la noche en Mezzanine, Estantería y Knapp). No puede haber dos supervisores distintos para el mismo turno y área.</p>`
+      : `<p class="sup-ayuda">Solo Administración, Gestión Humana o un Coordinador pueden cambiar las reglas.</p>`}
+  </div>`;
+}
+function cfgCrucesHtml(){
+  if(supReglasError) return "";
+  if(!supReglas.length) return `<div class="card"><h3>Cruces de supervisor</h3><p class="hint">Cuando guardes las reglas, aquí aparecerá el personal cuyo supervisor no corresponde a su turno y área.</p></div>`;
+  const cruces = (cfgAreas.personal || []).map(p => ({ p, esp: cruceSupervisor(p) })).filter(x => x.esp).sort((a, b) => cmpNombre(a.p.nombre, b.p.nombre));
+  const puedeCorregir = ["admin", "rrhh"].includes(session.rol);
+  if(!cruces.length) return `<div class="card"><h3>Cruces de supervisor</h3><p class="hint" style="margin:0;">✓ No hay cruces: todo el personal con regla tiene el supervisor que le corresponde.</p></div>`;
+  return `<div class="card" id="cfg-cruces">
+    <div class="card-header-row"><div><h3>Cruces de supervisor <span class="pk-badge">${cruces.length}</span></h3>
+      <p class="hint">Personal cuyo supervisor es distinto al configurado para su turno y área. Marcados = se les pasa al supervisor que corresponde.</p></div>
+      ${puedeCorregir ? `<button class="btn-sm primary" id="cruces-corregir" type="button">Corregir seleccionados</button>` : ""}</div>
+    ${puedeCorregir ? "" : `<p class="sup-ayuda" style="margin:0 0 10px;">Solo Administración o Gestión Humana pueden corregirlos; avísales con esta lista.</p>`}
+    <div class="table-scroll" style="max-height:420px;"><table class="pk-tabla"><thead><tr>${puedeCorregir ? `<th style="width:34px;"><input type="checkbox" id="cruces-todos" checked></th>` : ""}<th>Colaborador</th><th>Área · Turno</th><th>Supervisor actual</th><th>Le corresponde</th></tr></thead>
+      <tbody>${cruces.map(({ p, esp }) => `<tr>${puedeCorregir ? `<td><input type="checkbox" class="cruce-chk" data-dni="${escHtml(p.dni)}" data-sup="${escHtml(esp)}" checked></td>` : ""}
+        <td><div class="pk-nombre">${avatarHtml(p.nombre)}<span>${escHtml(p.nombre)}<small>${escHtml(p.dni)}</small></span></div></td>
+        <td class="meta">${escHtml([p.area, p.turno].filter(Boolean).join(" · ")) || "—"}</td><td class="meta">${escHtml(p.supervisor) || "(sin supervisor)"}</td><td class="cruce-sug">${escHtml(esp)}</td></tr>`).join("")}</tbody></table></div>
+  </div>`;
+}
+function enlazarSupCfg(){
+  const filas = document.getElementById("sup-filas");
+  const leer = () => [...filas.querySelectorAll("tr[data-i]")].map(tr => ({ supervisor: tr.querySelector(".sup-in").value.trim(), turno: tr.querySelector(".sup-turno").value, area: tr.querySelector(".sup-area").value }));
+  if(filas){
+    // El borrador se conserva al agregar o quitar filas (no se pierde lo escrito).
+    document.getElementById("sup-agregar")?.addEventListener("click", () => { cfgSup.borrador = [...leer(), { supervisor: "", turno: "", area: "" }]; pintarConfig(); });
+    filas.addEventListener("click", (e) => {
+      const b = e.target.closest(".sup-quitar"); if(!b) return;
+      const i = Number(b.closest("tr").dataset.i); const l = leer(); l.splice(i, 1); cfgSup.borrador = l; pintarConfig();
+    });
+    document.getElementById("sup-guardar")?.addEventListener("click", async () => {
+      const l = leer();
+      if(l.some(r => !r.supervisor || !r.turno || !r.area)){ toast("Completa supervisor, turno y área en todas las filas (o quita las que sobran).", true); return; }
+      // Dos supervisores para el mismo turno + área harían imposible saber a quién corresponde la gente.
+      const por = new Map();
+      for(const r of l){
+        const k = normNombre(r.turno) + "|" + claveAreaSup(r.area), v = por.get(k);
+        if(v && !mismoNombre(v.supervisor, r.supervisor)){ toast(`${r.area} · ${tituloTurno(r.turno)} tiene dos supervisores (${v.supervisor} y ${r.supervisor}). Deja solo uno.`, true); return; }
+        por.set(k, r);
+      }
+      try{
+        const res = await rpc("asis_supervisor_reglas_guardar", { p_reglas: l });
+        await cargarSupReglas(); cfgSup.borrador = supReglas.map(r => ({ ...r })); pk.hist = null;
+        toast(`Se guardaron ${res && res.guardadas != null ? res.guardadas : l.length} reglas`); pintarConfig();
+      }catch(er){ toast("No se pudo guardar: " + humanError(er), true); }
+    });
+  }
+  const todos = document.getElementById("cruces-todos");
+  if(todos) todos.addEventListener("change", () => document.querySelectorAll(".cruce-chk").forEach(c => { c.checked = todos.checked; }));
+  const corregir = document.getElementById("cruces-corregir");
+  if(corregir) corregir.addEventListener("click", async () => {
+    const cambios = [...document.querySelectorAll(".cruce-chk:checked")].map(c => ({ dni: c.dataset.dni, supervisor: c.dataset.sup }));
+    if(!cambios.length){ toast("Marca al menos una persona.", true); return; }
+    if(!confirm(`¿Pasar a ${cambios.length} ${cambios.length === 1 ? "persona" : "personas"} al supervisor que les corresponde? Queda registrado en Movimientos.`)) return;
+    corregir.disabled = true; corregir.textContent = "Corrigiendo…";
+    try{
+      const res = await rpc("asis_supervisor_corregir", { p_cambios: cambios });
+      pk.hist = null; await cargarAreasCfg();
+      toast(`Se corrigieron ${res && res.corregidos != null ? res.corregidos : cambios.length} supervisores`); pintarConfig();
+    }catch(er){ toast("No se pudo corregir: " + humanError(er), true); corregir.disabled = false; corregir.textContent = "Corregir seleccionados"; }
+  });
+}
 function pintarConfig(){
   const panel = document.getElementById("panel-config");
   const lista = funcionesCat;
@@ -2988,12 +3133,16 @@ function pintarConfig(){
           <li><strong>Renombrar</strong> corrige también las asignaciones ya guardadas (útil para arreglar una tilde o un error de tipeo).</li>
           <li><strong>Vacaciones</strong> y <strong>Falta</strong> son opciones de ausencia: aparecen aparte en el desplegable y tienen su propio indicador. Una falta no se copia al día siguiente.</li>
           <li>Las <strong>zonas</strong> de picking (Mezzanine, Estantería, Knapp) siguen asignándose en Personal → Editar; no son lo mismo que la función diaria.</li>
+          <li>Abajo, <strong>Supervisores por turno y área</strong> dice qué supervisor corresponde a cada turno y área; el sistema avisa y corrige al personal «cruzado».</li>
           <li>Pueden asignar funciones: Administrador, Gestión Humana, Coordinador y Supervisor. Gerencia solo consulta.</li>
         </ul>
       </div>
     </div>
-    ${cfgAreasHtml()}`;
+    ${cfgAreasHtml()}
+    ${cfgSupHtml()}
+    ${cfgCrucesHtml()}`;
   enlazarAreasCfg();
+  enlazarSupCfg();
   const nueva = document.getElementById("cfg-nueva");
   const agregar = async () => {
     const nombre = nueva.value.trim();
@@ -3053,7 +3202,7 @@ const MV_CAMPOS = { turno: "Turno", area: "Área", puesto: "Puesto", supervisor:
 // Variantes mal escritas que trae el Excel de RR.HH. y que ya existen bien escritas en el censo.
 const MV_AREA_FIX = { "3PL INTBOUND": "3PL INBOUND", "3PL OUTBOND": "3PL OUTBOUND", "KNNAP": "KNAPP", "KNAPP/RENCAJADO": "KNAPP/REENCAJADO",
   "RENCAJADO": "REENCAJADO", "REINYETADO": "REINYECTADO", "CAMARA DE FRIO OLT": "CAMARA DE FRIO/ OLT" };
-const mv = { sub: null, desde: null, hasta: null, tipo: "", q: "", rows: [], imps: [], archivo: "", fecha: null, roster: null, filas: null,
+const mv = { usarReglas: true, sub: null, desde: null, hasta: null, tipo: "", q: "", rows: [], imps: [], archivo: "", fecha: null, roster: null, filas: null,
              avisos: [], plan: null, detalle: "cambios", campo: "", soloRecientes: false, bajas: new Map(), cambiosOff: new Set(), resultado: null, ocupado: false };
 const mvCambiosAplicar = () => mv.plan ? mv.plan.cambios.filter(c => !mv.cambiosOff.has(c.dni + "|" + c.campo)).length : 0;
 const bannerMigracion0016 = () => `<div class="banner">Falta aplicar la migración <strong>0016_asis_movimientos_importacion.sql</strong> en Supabase (SQL Editor → pegar el archivo completo → Run). Después recarga esta página.</div>`;
@@ -3186,8 +3335,14 @@ function mvCalcularPlan(filas, roster){
   };
   const plan = { activos: [], sinCambios: 0, cambios: [], nuevos: [], reingresos: [], bajas: [], porClave: new Map() };
   const vistos = new Set(), explicitas = new Map();
-  filas.forEach(e => {
-    const clave = buscar(e.dni), r = clave ? mapa.get(clave) : null;
+  filas.forEach(e0 => {
+    const clave = buscar(e0.dni), r = clave ? mapa.get(clave) : null;
+    // Con reglas de supervisor activas, el supervisor es el que corresponde a su turno y área (del Excel o, si no los trae, los actuales).
+    let e = e0;
+    if(mv.usarReglas && supReglas.length && !e0.cesado){
+      const esp = supervisorQueCorresponde(e0.area || (r && r.area), e0.turno || (r && r.turno));
+      if(esp && !mismoNombre(esp, e0.supervisor || "")) e = { ...e0, supervisor: esp, supervisorExcel: e0.supervisor };
+    }
     if(e.cesado){   // el archivo ya trae a esta persona como cesada: es una baja con su motivo y fecha
       if(r && (r.estado || "").toUpperCase() === "ACTIVO"){ vistos.add(clave); explicitas.set(clave, e); }
       return;
@@ -3368,6 +3523,9 @@ function mvPintarPreview(){
       ${kpiTile("Nuevos / reingresos", p.nuevos.length + " / " + p.reingresos.length, "altas y regresos", "#A78BFA", "➕")}
       ${kpiTile("Bajas propuestas", p.bajas.length, `${pctBajas}% del personal activo`, p.bajas.length ? "#EF4444" : "#22C55E", "📤")}
     </div>
+    ${supReglas.length ? `<div class="card" style="padding:12px 16px;"><label class="pk-check" style="padding:0;white-space:normal;"><input type="checkbox" id="mv-reglas" ${mv.usarReglas ? "checked" : ""}>
+      Asignar el supervisor que corresponde a su turno y área (Configuración → Supervisores por turno y área). Es lo recomendado: así el Excel no vuelve a dejar gente «cruzada».
+      ${p.activos.filter(a => a.supervisorExcel !== undefined).length ? `<b>${p.activos.filter(a => a.supervisorExcel !== undefined).length}</b> personas del archivo traen otro supervisor.` : ""}</label></div>` : ""}
     ${alerta ? `<div class="banner">Se proponen <strong>${p.bajas.length} bajas (${pctBajas}% del personal activo)</strong>. Antes de aplicar revisa que el Excel esté completo: desmarca a quien siga trabajando y se conservará como activo.</div>` : ""}
     <div class="card">
       <div class="pk-chips" id="mv-chips">${chips.map(([k, l, n, c]) => `<button type="button" class="pk-chip${mv.detalle === k ? " on" : ""}" data-k="${k}" style="--c:${c};"><i></i>${l} <b>${n}</b></button>`).join("")}</div>
@@ -3380,6 +3538,14 @@ function mvPintarPreview(){
   document.getElementById("mv-chips").addEventListener("click", (e) => { const b = e.target.closest(".pk-chip"); if(!b) return; mv.detalle = b.dataset.k;
     document.querySelectorAll("#mv-chips .pk-chip").forEach(x => x.classList.toggle("on", x === b)); mvPintarDetalle(); });
   document.getElementById("mv-aplicar").addEventListener("click", mvAplicar);
+  const chkReglas = document.getElementById("mv-reglas");
+  if(chkReglas) chkReglas.addEventListener("change", () => {
+    mv.usarReglas = chkReglas.checked;
+    mv.plan = mvCalcularPlan(mv.filas, mv.roster);
+    mv.bajas = new Map(mv.plan.bajas.map(b => [b.dni, mv.bajas.get(b.dni) || { sel: true, motivo: b.motivo, f_cese: b.f_cese }]));
+    mv.cambiosOff = new Set([...mv.cambiosOff].filter(k => mv.plan.cambios.some(c => c.dni + "|" + c.campo === k)));
+    mvPintarPreview();
+  });
   mvPintarDetalle();
 }
 
@@ -3531,7 +3697,7 @@ async function iniciarApp(){
   document.getElementById("tab-config").hidden = !PK_ROLES_CONFIG.includes(session.rol);
   document.getElementById("grp-sistema").hidden = document.getElementById("tab-config").hidden;
   document.getElementById("tab-movimientos").hidden = !MV_ROLES_VER.includes(session.rol);
-  await Promise.all([cargarAreas(), cargarZonas()]);
+  await Promise.all([cargarAreas(), cargarZonas(), cargarSupReglas()]);
   renderTabActivo();
 }
 
