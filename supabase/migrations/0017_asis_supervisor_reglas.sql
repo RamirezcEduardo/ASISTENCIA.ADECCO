@@ -54,7 +54,7 @@ begin
   return json_build_object('guardadas', n);
 end; $$;
 
--- p_cambios = [{dni, supervisor}]: cambia el supervisor de la ULTIMA fila de cada persona ACTIVA.
+-- p_cambios = [{dni, supervisor}]: cambia el supervisor vigente de cada persona ACTIVA (ultima fila y dias recientes con el mismo valor).
 create or replace function public.asis_supervisor_corregir(p_token text, p_cambios jsonb)
 returns json language plpgsql security definer set search_path to 'public' as $$
 declare
@@ -76,7 +76,11 @@ begin
     select * into prev from public.b2c_asistencia where dni = v_dni order by fecha desc limit 1;
     continue when not found or upper(trim(coalesce(prev.estado, ''))) <> 'ACTIVO'
                or upper(trim(coalesce(prev.supervisor, ''))) = upper(v_sup);
-    update public.b2c_asistencia set supervisor = v_sup where dni = v_dni and fecha = prev.fecha;
+    -- Se corrige la ultima fila y tambien los dias recientes (30) que tenian ese mismo supervisor equivocado: asi el historial
+    -- de Picking no sigue mostrando al personal "cruzado" en los dias anteriores. Lo que tuvo otro supervisor no se toca.
+    update public.b2c_asistencia set supervisor = v_sup
+     where dni = v_dni and fecha >= prev.fecha - 30
+       and upper(trim(coalesce(supervisor, ''))) = upper(trim(coalesce(prev.supervisor, '')));
     insert into public.asis_movimientos (fecha, dni, nombre, tipo, campo, valor_anterior, valor_nuevo, motivo, usuario_nombre)
     values (v_hoy, v_dni, prev.nombre, 'CAMBIO', 'supervisor', prev.supervisor, v_sup,
             'Cruce corregido segun la configuracion de supervisores', v_unombre);
