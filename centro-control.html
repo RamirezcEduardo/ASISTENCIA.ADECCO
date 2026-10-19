@@ -246,8 +246,13 @@
   .estado-pill.pend{background:var(--amber-dim);color:var(--amber);}
 
   /* ============ Modal alta/edicion/baja de personal ============ */
-  #personal-modal{position:fixed;inset:0;z-index:60;background:rgba(5,6,9,.65);display:none;align-items:center;justify-content:center;padding:16px;}
-  #personal-modal.show{display:flex;}
+  #personal-modal,#pk-export-modal{position:fixed;inset:0;z-index:60;background:rgba(5,6,9,.65);display:none;align-items:center;justify-content:center;padding:16px;}
+  #personal-modal.show,#pk-export-modal.show{display:flex;}
+  .pkx-atajos{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 4px;}
+  .pkx-opciones{display:grid;gap:9px;margin-top:14px;}
+  .personal-modal-card .pkx-opciones label{display:flex;align-items:flex-start;gap:9px;margin:0;padding:0;font-size:12.5px;line-height:1.45;color:var(--text-soft);text-transform:none;letter-spacing:0;cursor:pointer;white-space:normal;}
+  .personal-modal-card .pkx-opciones span{min-width:0;}
+  .personal-modal-card .pkx-opciones input{width:auto;padding:0;margin:2px 0 0;flex-shrink:0;accent-color:var(--accent);}
   .personal-modal-card{width:min(94vw,460px);max-height:92vh;overflow:auto;background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:24px;box-shadow:var(--shadow);}
   .personal-modal-card h3{margin:0 0 8px;font-size:16px;}
   .personal-modal-card p.hint{margin:0 0 16px;font-size:12px;color:var(--muted);line-height:1.5;}
@@ -540,6 +545,33 @@
   </main>
 </div>
 <div class="toast" id="toast" role="status"></div>
+
+<div id="pk-export-modal" onclick="if(event.target===this) cerrarExportPicking()">
+  <div class="personal-modal-card" style="width:min(94vw,470px);">
+    <h3>Descargar Picking en Excel</h3>
+    <p class="hint">Elige el rango de fechas. Se descarga una fila por persona y día, con la función que tuvo, su supervisor y turno de ese día.</p>
+    <div class="pm-row-2">
+      <div><label for="pkx-desde">Desde</label><input type="date" id="pkx-desde"></div>
+      <div><label for="pkx-hasta">Hasta</label><input type="date" id="pkx-hasta"></div>
+    </div>
+    <div class="pkx-atajos">
+      <button class="btn-sm" type="button" onclick="pkxAtajo('dia')">El día en pantalla</button>
+      <button class="btn-sm" type="button" onclick="pkxAtajo(7)">Últimos 7 días</button>
+      <button class="btn-sm" type="button" onclick="pkxAtajo(14)">Últimos 14 días</button>
+      <button class="btn-sm" type="button" onclick="pkxAtajo('mes')">Este mes</button>
+    </div>
+    <div class="pkx-opciones">
+      <label class="pk-check"><input type="checkbox" id="pkx-filtros" checked><span>Respetar los filtros de la pantalla (área, zona, turno, supervisor, búsqueda y función)</span></label>
+      <label class="pk-check"><input type="checkbox" id="pkx-sin" checked><span>Incluir a quienes no tienen función («sin asignar»)</span></label>
+      <label class="pk-check"><input type="checkbox" id="pkx-vacios"><span>Incluir los días sin actividad (sin funciones ni ingresos, como domingos o feriados)</span></label>
+    </div>
+    <div class="pm-status" id="pkx-estado"></div>
+    <div class="pm-actions">
+      <button class="btn-sm" type="button" onclick="cerrarExportPicking()">Cancelar</button>
+      <button class="btn-sm primary" type="button" id="pkx-descargar" onclick="descargarPickingRango()">Descargar</button>
+    </div>
+  </div>
+</div>
 
 <div id="personal-modal">
   <div class="personal-modal-card">
@@ -2216,7 +2248,7 @@ async function renderPicking(){
         <label class="pk-check pk-solo-reg"><input type="checkbox" id="pk-solo-sin" ${pk.soloSin ? "checked" : ""}>Solo sin asignar</label>
         <label class="pk-check" title="Muestra también al personal de áreas que no son de picking (Despacho, 3PL…), por ejemplo para prestar a alguien por un día."><input type="checkbox" id="pk-otras" ${pk.incluirOtras ? "checked" : ""}>Incluir otras áreas</label>
         <button class="btn-sm pk-solo-reg" id="pk-copiar" type="button" disabled>${ic("copiar")}Copiar día anterior</button>
-        <button class="btn-sm pk-solo-reg" id="pk-exportar" type="button">${ic("entra")}Excel</button>
+        <button class="btn-sm pk-solo-reg" id="pk-exportar" type="button" title="Descargar Excel (elige el rango de fechas)">${ic("entra")}Excel</button>
       </div>
       <p class="pk-nota" id="pk-nota"></p>
       <p class="pk-nota" id="pk-alcance" style="margin-top:4px;"></p>
@@ -2349,7 +2381,7 @@ function pkEnlazarEventos(){
   el("pk-buscar").addEventListener("input", (e) => { pk.q = e.target.value; pintarPicking(); });
   el("pk-solo-sin").addEventListener("change", (e) => { pk.soloSin = e.target.checked; pintarPicking(); });
   el("pk-otras").addEventListener("change", (e) => { pk.incluirOtras = e.target.checked; renderTabActivo(); });   // recarga: cambian los supervisores/turnos disponibles
-  el("pk-exportar").addEventListener("click", exportarPickingExcel);
+  el("pk-exportar").addEventListener("click", abrirExportPicking);
   el("pk-copiar").addEventListener("click", copiarPickingAnterior);
   // El rango (7/14/30 días) es uno solo: el gráfico y el historial por día se mueven juntos.
   const cambiarRango = (e) => { pk.histDias = Number(e.target.value) || 14; el("pk-hist-dias").value = el("pk-hd-dias").value = String(pk.histDias); pintarHistorialPicking(); };
@@ -2924,18 +2956,93 @@ async function copiarPickingAnterior(){
   }
 }
 
-function exportarPickingExcel(){
-  const filas = pkFilasTabla(pkPorSupervisor(pkBase()));
-  if(!filas.length){ toast("No hay filas para exportar.", true); return; }
-  const rows = filas.map(p => ({
-    Fecha: pk.fecha, DNI: p.dni, Colaborador: p.nombre, Puesto: p.puesto || "", Área: p.area || "", Turno: p.turno || "",
-    "Zona picking": zonasTexto(p.dni), Supervisor: p.supervisor || "", Función: p.funcion || "(sin asignar)",
-    Ingreso: p.ingreso ? fmtHora(p.ingreso) : "", "Asignado por": p.asignado_por || "",
-  }));
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Picking");
-  XLSX.writeFile(wb, `picking_${pk.fecha}.xlsx`);
+/* ---- Excel de Picking por rango de fechas ---- */
+const PKX_MAX_DIAS = 62;
+function abrirExportPicking(){
+  const d = pk.fecha || todayISO();
+  document.getElementById("pkx-desde").value = d;
+  document.getElementById("pkx-hasta").value = d;
+  const est = document.getElementById("pkx-estado"); est.textContent = ""; est.className = "pm-status";
+  document.getElementById("pkx-descargar").disabled = false;
+  document.getElementById("pk-export-modal").classList.add("show");
+}
+function cerrarExportPicking(){ document.getElementById("pk-export-modal").classList.remove("show"); }
+function pkxAtajo(tipo){
+  const hoy = todayISO(), tope = addDays(hoy, 1);
+  const fin = pk.fecha && pk.fecha <= tope ? pk.fecha : hoy;
+  let desde = fin, hasta = fin;
+  if(tipo === "dia") desde = hasta = pk.fecha || hoy;
+  else if(tipo === "mes"){ desde = fin.slice(0, 8) + "01"; }
+  else desde = addDays(fin, -(Number(tipo) - 1));
+  document.getElementById("pkx-desde").value = desde;
+  document.getElementById("pkx-hasta").value = hasta;
+}
+// Mismas condiciones que la tabla en pantalla (alcance de Picking + filtros), pero sobre la lista de CUALQUIER día.
+function pkxFiltrar(lista, respetar){
+  const enAlcance = lista.filter(p => pkEnAlcance(p.dni, p.area));
+  if(!respetar) return enAlcance;
+  const areaSel = normArea(filtros.area);
+  const base = enAlcance.filter(p => (!areaSel || normArea(p.area) === areaSel) && pasaFiltroZona(p.dni) && (!pk.turno || turnoIgual(p.turno, pk.turno)));
+  return pkFilasTabla(pkPorSupervisor(base));
+}
+async function descargarPickingRango(){
+  const est = document.getElementById("pkx-estado"), btn = document.getElementById("pkx-descargar");
+  const pon = (t, malo) => { est.textContent = t; est.className = "pm-status" + (malo ? " bad" : ""); };
+  const desde = document.getElementById("pkx-desde").value, hasta = document.getElementById("pkx-hasta").value;
+  const valida = (f) => /^\d{4}-\d{2}-\d{2}$/.test(f) && Number(f.slice(0, 4)) >= 2000;
+  if(!valida(desde) || !valida(hasta)){ pon("Elige las dos fechas.", true); return; }
+  if(desde > hasta){ pon("«Desde» no puede ser posterior a «Hasta».", true); return; }
+  if(hasta > addDays(todayISO(), 1)){ pon("La fecha final no puede pasar de mañana.", true); return; }
+  const dias = []; for(let d = desde; d <= hasta; d = addDays(d, 1)) dias.push(d);
+  if(dias.length > PKX_MAX_DIAS){ pon(`El rango es de ${dias.length} días; el máximo es ${PKX_MAX_DIAS}. Descárgalo en partes.`, true); return; }
+  const respetar = document.getElementById("pkx-filtros").checked, conSin = document.getElementById("pkx-sin").checked, conVacios = document.getElementById("pkx-vacios").checked;
+  btn.disabled = true;
+  try{
+    // Cada día se pide con la misma consulta que usa la pantalla (trae lo de ESE día: supervisor, turno, función, ingreso), en tandas de 4.
+    const porDia = new Map(), cola = dias.slice(); let hechos = 0;
+    pon(`Leyendo 0 de ${dias.length} días…`);
+    const trabajador = async () => {
+      while(cola.length){
+        const d = cola.shift();
+        porDia.set(d, (await rpc("asis_picking_dia", { p_fecha: d })) || []);
+        pon(`Leyendo ${++hechos} de ${dias.length} días…`);
+      }
+    };
+    await Promise.all([trabajador(), trabajador(), trabajador(), trabajador()]);
+
+    const filas = [], resumen = [], nombresFunc = new Set(); let omitidos = 0;
+    dias.forEach(d => {
+      const crudo = porDia.get(d) || [];
+      const lista = pkxFiltrar(crudo, respetar).slice().sort((a, b) => cmpNombre(a.nombre, b.nombre));
+      // Un día sin una sola función ni ingreso (en todo el personal de Picking) es un día sin registro, no un día "sin asignar".
+      const actividad = crudo.some(p => pkEnAlcance(p.dni, p.area) && (p.funcion || p.ingreso));
+      if(!actividad && !conVacios){ omitidos++; return; }
+      const cuenta = {}; lista.forEach(p => { const k = p.funcion || "(sin asignar)"; cuenta[k] = (cuenta[k] || 0) + 1; if(p.funcion) nombresFunc.add(p.funcion); });
+      resumen.push({ d, total: lista.length, cuenta, vac: lista.filter(p => p.funcion && normArea(p.funcion) === "VACACIONES").length, falta: lista.filter(p => p.funcion && normArea(p.funcion) === "FALTA").length });
+      (conSin ? lista : lista.filter(p => p.funcion)).forEach(p => filas.push({
+        Fecha: d, DNI: p.dni, Colaborador: p.nombre, Puesto: p.puesto || "", Área: p.area || "", Turno: p.turno || "",
+        "Zona picking": zonasTexto(p.dni), Supervisor: p.supervisor || "", Función: p.funcion || "(sin asignar)",
+        Ingreso: p.ingreso ? fmtHora(p.ingreso) : "", "Asignado por": p.asignado_por || "",
+      }));
+    });
+    if(!filas.length){ pon(omitidos ? `No hay registros en ese rango (${omitidos} ${omitidos === 1 ? "día sin actividad" : "días sin actividad"}). Marca «Incluir los días sin actividad» si los necesitas.` : "No hay filas con esas condiciones.", true); return; }
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), "Picking");
+    // Resumen: una fila por día con cuántos tuvo cada función.
+    const orden = [...funcionesCat.map(f => f.nombre).filter(n => nombresFunc.has(n)), ...[...nombresFunc].filter(n => !funcionesCat.some(f => f.nombre === n))];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumen.map(r => {
+      const o = { Fecha: r.d, Colaboradores: r.total };
+      orden.forEach(n => { o[n] = r.cuenta[n] || 0; });
+      o["(sin asignar)"] = r.cuenta["(sin asignar)"] || 0;
+      return o;
+    })), "Resumen por día");
+    XLSX.writeFile(wb, desde === hasta ? `picking_${desde}.xlsx` : `picking_${desde}_a_${hasta}.xlsx`);
+    toast(`Excel descargado: ${filas.length} filas de ${resumen.length} ${resumen.length === 1 ? "día" : "días"}${omitidos ? ` (${omitidos} sin actividad no se incluyeron)` : ""}`);
+    cerrarExportPicking();
+  }catch(e){
+    pon("No se pudo descargar: " + humanError(e), true);
+  }finally{ btn.disabled = false; }
 }
 
 /* ================= TAB: Configuración (catálogo de funciones) ================= */
