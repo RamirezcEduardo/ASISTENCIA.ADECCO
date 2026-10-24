@@ -518,9 +518,12 @@ async function cargarModelos(){
 }
 
 let rostrosCargadosEn = 0;
+let camMs = 0, detMs = 0;   // medicion que se muestra en pantalla: arranque de la camara y tiempo por deteccion
 async function cargarRostros(){
   const { data, error } = await sb.rpc("asis_rostros_listar");
   if(error){ console.error("asis_rostros_listar", error); return; }
+  // Una respuesta vacia (corte momentaneo) no debe borrar a quienes ya estaban cargados: nadie seria reconocido hasta el siguiente refresco.
+  if((!data || !data.length) && faceMatcher){ console.warn("asis_rostros_listar devolvio una lista vacia: se conserva la anterior"); return; }
   rostrosCargadosEn = Date.now();
   rostrosDB = (data || []).map(r => ({ dni: r.dni, nombre: r.nombre, embedding: new Float32Array(r.embedding) }));
   faceMatcher = rostrosDB.length
@@ -550,7 +553,7 @@ async function iniciarCamara(){
   if(camaraStream){
     // Si Android reclamo la camara (otra app, pantalla apagada) el stream queda muerto: se reinicia en vez de reutilizarlo.
     const pista = camaraStream.getVideoTracks()[0];
-    if(pista && pista.readyState === "live" && video.srcObject === camaraStream && video.videoWidth) return;
+    if(pista && pista.readyState === "live" && video.srcObject === camaraStream) return;
     detenerCamara();
   }
   camaraStream = await pedirCamara();
@@ -559,15 +562,14 @@ async function iniciarCamara(){
     const t = setTimeout(() => rej(new Error("La cámara no respondió. Cierra y vuelve a intentar.")), 10000);
     video.onloadedmetadata = () => { clearTimeout(t); res(); };
   });
-  try{ await video.play(); }catch(e){ /* autoplay ya la inicia; algunos WebView exigen el play() explicito */ }
   overlayCanvas.width = video.videoWidth;
   overlayCanvas.height = video.videoHeight;
-  // Se retira la cubierta cuando llega el primer cuadro (o, a lo mucho, 1,5 s despues).
-  await new Promise(res => {
-    const t = setTimeout(res, 1500);
-    if(video.requestVideoFrameCallback) video.requestVideoFrameCallback(() => { clearTimeout(t); res(); });
-  });
-  camUnit.classList.remove("cargando");
+  // La cubierta (que tapa el icono de "reproducir" del WebView) se retira sola, SIN hacer esperar al reconocimiento:
+  // al empezar a reproducir, o a mas tardar al segundo. Antes se esperaba el primer cuadro con la camara tapada y cada
+  // marcacion arrancaba hasta 1,5 s mas tarde.
+  const quitarCubierta = () => camUnit.classList.remove("cargando");
+  video.addEventListener("playing", quitarCubierta, { once: true });
+  setTimeout(quitarCubierta, 1000);
 }
 // Texto claro para el personal de piso segun por que fallo la camara.
 function mensajeCamara(err){
@@ -609,8 +611,8 @@ function dibujarCaja(box, color){
 
 async function abrirScan(accion){
   clearTimeout(resetTimer); // por si quedó un auto-retorno pendiente de la persona anterior
-  // Rostros enrolados en otro kiosco (o si la carga del arranque fallo por falta de red): se refrescan sin bloquear.
-  if(Date.now() - rostrosCargadosEn > 5 * 60 * 1000) cargarRostros().catch(() => {});
+  // Si nunca se pudieron cargar los rostros (el arranque fallo por falta de red) se piden ya; el refresco normal se hace al terminar.
+  if(!rostrosCargadosEn) cargarRostros().catch(() => {});
   accionActual = accion;
   accionTag.textContent = ACCION_INFO[accion].tag;
   resultCard.hidden = true;
@@ -631,7 +633,9 @@ async function abrirScan(accion){
       await cargarModelos();
     }
     setHint("Solicitando acceso a la cámara…");
+    const tCam = performance.now();
     await iniciarCamara();
+    camMs = performance.now() - tCam;
     dibujarCaja(null); // óvalo guía limpio (por si quedó en rojo/verde de un intento anterior)
   }catch(err){
     console.error(err);
@@ -640,7 +644,8 @@ async function abrirScan(accion){
     scanRetryBtn.hidden = false;
     return;
   }
-  scanDiag.textContent = "Cámara " + video.videoWidth + "×" + video.videoHeight;
+  detMs = 0;
+  scanDiag.textContent = `Cámara ${video.videoWidth}×${video.videoHeight} · arranque ${(camMs / 1000).toFixed(1)} s`;
   setHint("Mira a la cámara para identificarte…");
   scanning = true;
   loopReconocer();
@@ -653,6 +658,8 @@ function cerrarScan(){
   detenerCamara();
   scanView.classList.remove("show");
   accionActual = null;
+  // Rostros enrolados en otro kiosco: se refrescan cada 15 min, YA terminada la marcacion (no compite con la camara).
+  if(rostrosCargadosEn && Date.now() - rostrosCargadosEn > 15 * 60 * 1000) setTimeout(() => cargarRostros().catch(() => {}), 1500);
 }
 
 function setHint(text){ scanHint.textContent = text; }
@@ -661,7 +668,11 @@ async function loopReconocer(){
   if(!scanning) return;
   if(procesando){ recognizeTimer = setTimeout(loopReconocer, RECOGNIZE_INTERVAL_MS); return; }
   try{
+    const t1 = performance.now();
     const det = await detectarUnaVez();
+    const dt = performance.now() - t1;
+    detMs = detMs ? detMs * 0.7 + dt * 0.3 : dt;
+    if(scanning) scanDiag.textContent = `Cámara ${video.videoWidth}×${video.videoHeight} · arranque ${(camMs / 1000).toFixed(1)} s · detección ${Math.round(detMs)} ms`;
     if(!det){
       dibujarCaja(null);
       stableDni = null; stableCount = 0;
@@ -911,8 +922,9 @@ async function main(){
 main();
 // Al volver de segundo plano (pantalla apagada, otra app) la camara pudo quedar suspendida: se reactiva si hay un escaneo abierto.
 document.addEventListener("visibilitychange", () => {
-  if(document.hidden || !scanning) return;
-  iniciarCamara().catch(err => setHint("No se pudo reanudar la cámara: " + (err && err.message ? err.message : err)));
+  if(document.hidden || !scanning || !camaraStream) return;
+  const pista = camaraStream.getVideoTracks()[0];
+  if(pista && pista.readyState === "ended") iniciarCamara().catch(err => setHint("No se pudo reanudar la cámara: " + (err && err.message ? err.message : err)));
 });
 </script>
 </body>
