@@ -549,7 +549,7 @@
 <div id="pk-export-modal" onclick="if(event.target===this) cerrarExportPicking()">
   <div class="personal-modal-card" style="width:min(94vw,470px);">
     <h3>Descargar Picking en Excel</h3>
-    <p class="hint">Elige el rango de fechas. Se descarga una fila por persona y día, con la función que tuvo, su supervisor y turno de ese día.</p>
+    <p class="hint">Elige el rango de fechas y qué quieres descargar. Los datos son los de cada día: el supervisor, el turno y el área que tenía la persona ese día.</p>
     <div class="pm-row-2">
       <div><label for="pkx-desde">Desde</label><input type="date" id="pkx-desde"></div>
       <div><label for="pkx-hasta">Hasta</label><input type="date" id="pkx-hasta"></div>
@@ -561,8 +561,10 @@
       <button class="btn-sm" type="button" onclick="pkxAtajo('mes')">Este mes</button>
     </div>
     <div class="pkx-opciones">
+      <label class="pk-check"><input type="checkbox" id="pkx-area"><span><b>Histórico por área y día</b>: cuántas personas tuvo cada función en cada área, por día, con el equipo y los «sin asignar»</span></label>
+      <label class="pk-check"><input type="checkbox" id="pkx-det" checked><span><b>Detalle por persona y día</b>: una fila por persona y día</span></label>
       <label class="pk-check"><input type="checkbox" id="pkx-filtros" checked><span>Respetar los filtros de la pantalla (área, zona, turno, supervisor, búsqueda y función)</span></label>
-      <label class="pk-check"><input type="checkbox" id="pkx-sin" checked><span>Incluir a quienes no tienen función («sin asignar»)</span></label>
+      <label class="pk-check"><input type="checkbox" id="pkx-sin" checked><span>En el detalle, incluir a quienes no tienen función («sin asignar»)</span></label>
       <label class="pk-check"><input type="checkbox" id="pkx-vacios"><span>Incluir los días sin actividad (sin funciones ni ingresos, como domingos o feriados)</span></label>
     </div>
     <div class="pm-status" id="pkx-estado"></div>
@@ -2001,7 +2003,8 @@ const pk = { fecha: null, filas: [], todas: [],   // filas = las que entran a Pi
              sel: new Set(), hist: null, histDias: 14, histT: null,
              vista: null,           // apartado de Picking: "ind" (indicadores) o "reg" (registro)
              agrupar: "sup",        // resumen del dia: por "sup" o por "turno"
-             vistaHist: "dia",      // historial: "dia" | "sup" | "persona"
+             vistaHist: "dia",      // historial: "dia" | "sup" | "area" | "persona"
+             areaHist: "",          // vista "Por area": "" = todas las areas, o la clave de una
              soloConAsig: true };   // detalle por persona: ocultar a quien no tuvo funcion en el periodo
 
 // Una migración sin aplicar se reconoce porque PostgREST no encuentra la función.
@@ -2143,17 +2146,17 @@ function pasaZonaHist(r){
   if(f === "NINGUNA") return z.length === 0;
   return z.includes(f);
 }
-function pkPasaHist(r, sinSup){
+function pkPasaHist(r, sinSup, sinArea){
   const areaSel = normArea(filtros.area);
-  return pkEnAlcance(r.dni, r.area) && (!areaSel || normArea(r.area) === areaSel) && pasaZonaHist(r)
+  return pkEnAlcance(r.dni, r.area) && (sinArea || !areaSel || normArea(r.area) === areaSel) && pasaZonaHist(r)
     && (!pk.turno || turnoIgual(r.turno, pk.turno)) && (sinSup || !pk.sup || supIgual(r.supervisor, pk.sup));
 }
 const pkFechasHist = () => Array.from({ length: pk.histDias }, (_, i) => addDays(pk.fecha, i - (pk.histDias - 1)));
 // Filas del historial dentro de la ventana elegida y con los filtros activos.
-function pkHistFilas(sinSup){
+function pkHistFilas(sinSup, sinArea){
   if(!pk.hist) return [];
   const desde = addDays(pk.fecha, -(pk.histDias - 1));
-  return pk.hist.rows.filter(r => r.fecha >= desde && r.fecha <= pk.fecha && pkPasaHist(r, sinSup));
+  return pk.hist.rows.filter(r => r.fecha >= desde && r.fecha <= pk.fecha && pkPasaHist(r, sinSup, sinArea));
 }
 function pkFilasTabla(vis){
   const q = pk.q.toLowerCase().trim();
@@ -2321,8 +2324,10 @@ async function renderPicking(){
           <div class="pk-seg" id="pk-hd-seg">
             <button type="button" data-v="dia">Resumen por día</button>
             <button type="button" data-v="sup">Por supervisor</button>
+            <button type="button" data-v="area">Por área</button>
             <button type="button" data-v="persona">Detalle por persona</button>
           </div>
+          <select id="pk-hd-area" class="btn-sm" hidden title="Ver una sola área"></select>
           <select id="pk-hd-dias" class="btn-sm">
             <option value="7">7 días</option><option value="14">14 días</option><option value="30">30 días</option>
           </select>
@@ -2388,8 +2393,9 @@ function pkEnlazarEventos(){
   el("pk-hist-dias").addEventListener("change", cambiarRango);
   el("pk-hd-dias").addEventListener("change", cambiarRango);
   el("pk-hd-seg").addEventListener("click", (e) => { const b = e.target.closest("button[data-v]"); if(!b) return; pk.vistaHist = b.dataset.v; pintarHistDias(); });
+  el("pk-hd-area").addEventListener("change", (e) => { pk.areaHist = e.target.value; pintarHistDias(); });
   el("pk-hd-solo").addEventListener("change", (e) => { pk.soloConAsig = e.target.checked; pintarHistDias(); });
-  el("pk-hd-excel").addEventListener("click", exportarHistorialPicking);
+  el("pk-hd-excel").addEventListener("click", () => { if(pk.vistaHist === "area") abrirExportPicking({ tipo: "area" }); else exportarHistorialPicking(); });
   el("pk-hd").addEventListener("click", (e) => {
     const th = e.target.closest("th[data-fecha]");
     const trF = e.target.closest("tr[data-fecha]");
@@ -2794,6 +2800,29 @@ function pkDatosPorSup(){
   lista.forEach(g => { g.dias = fechas.filter(f => g.por[f]).length; });
   return { fechas, lista, activo };
 }
+// Por área: para cada área, cuántas personas tuvo cada función cada día (y por turno). Ignora el filtro de Área (compara
+// las áreas entre sí); respeta Zona, Turno y Supervisor. La clave del área junta las variantes (Mezanine / Mezzanine).
+const pkClaveAreaFila = (r) => (r.area ? claveAreaSup(r.area) : "") || "__SINAREA__";
+function pkDatosPorArea(){
+  const filas = pkHistFilas(false, true);
+  const funcs = pkColumnasFunc(filas);
+  const fechas = pkFechasHist();
+  const turnoKeys = [...new Set(filas.map(pkClaveTurnoFila))].sort((a, b) => (a === SIN_TURNO) - (b === SIN_TURNO) || ordenTurno(a) - ordenTurno(b) || a.localeCompare(b));
+  const areas = new Map();
+  const area = (k, label) => areas.get(k) || (areas.set(k, { key: k, label, equipo: 0, total: 0, porFecha: {} }), areas.get(k));
+  const etiqueta = (r) => { const z = zonaDeArea(r.area); return z ? zonaDef(z).label : (String(r.area || "").trim() || "(Sin área)"); };
+  filas.forEach(r => {
+    const a = area(pkClaveAreaFila(r), etiqueta(r));
+    const d = a.porFecha[r.fecha] || (a.porFecha[r.fecha] = { total: 0, por: {}, turnos: {} });
+    d.total++; a.total++; d.por[r.funcion] = (d.por[r.funcion] || 0) + 1;
+    const t = pkClaveTurnoFila(r); d.turnos[t] = (d.turnos[t] || 0) + 1;
+  });
+  // Tamaño del equipo hoy en cada área (con Zona/Turno/Supervisor aplicados), para dar contexto a las cifras.
+  pkPorSupervisor(pk.filas.filter(p => pasaFiltroZona(p.dni) && (!pk.turno || turnoIgual(p.turno, pk.turno))))
+    .forEach(p => { const k = p.area ? claveAreaSup(p.area) : "__SINAREA__"; if(areas.has(k)) areas.get(k).equipo++; });
+  const lista = [...areas.values()].sort((a, b) => b.total - a.total || a.label.localeCompare(b.label, "es"));
+  return { filas, funcs, fechas, turnoKeys, turnoLabel: (k) => pkEtiquetaTurnoFila(k, filas), lista };
+}
 // Detalle por persona: la función de cada colaborador en cada día.
 function pkDatosPorPersona(){
   const filas = pkHistFilas();
@@ -2818,10 +2847,12 @@ function pintarHistDias(){
   if(!cont || tabActivo !== "picking") return;
   document.querySelectorAll("#pk-hd-seg button").forEach(b => b.classList.toggle("on", b.dataset.v === pk.vistaHist));
   document.getElementById("pk-hd-solo-wrap").hidden = pk.vistaHist !== "persona";
+  const selArea = document.getElementById("pk-hd-area"); selArea.hidden = pk.vistaHist !== "area";
   const ley = document.getElementById("pk-hd-leyenda"); ley.hidden = true;
   const HINTS = {
     dia: "Cuántas personas tuvo cada función por día y por turno. Toca un día para abrirlo.",
     sup: "Personas con función asignada por supervisor y día, frente al tamaño de su equipo. Verde: casi todo el equipo · ámbar: parcial · rojo: no asignó en un día con actividad.",
+    area: "Cuántas personas tuvo cada función por día en cada área (el área del día, no la de hoy). Aplica Zona, Turno y Supervisor.",
     persona: "Qué función tuvo cada persona cada día, con el supervisor y turno que tenía ese día. Toca un día para abrirlo.",
   };
   document.getElementById("pk-hd-hint").textContent = HINTS[pk.vistaHist];
@@ -2858,6 +2889,32 @@ function pintarHistDias(){
           const cls = n ? ((g.equipo ? n / g.equipo : 1) >= 0.9 ? "ok" : "parcial") : (d.activo[f] ? "falta" : "nada");
           return `<td class="pk-cel-sup ${cls} ${hoyCol(f)}" title="${escHtml(g.label)} · ${escHtml(fmtDiaLargo(f))}: ${n} de ${g.equipo}">${n || (d.activo[f] ? "0" : "·")}</td>`; }).join("")}
         <td class="num sep">${g.dias} / ${d.fechas.filter(f => d.activo[f]).length}</td></tr>`).join("")}</tbody></table>`;
+    return;
+  }
+
+  if(pk.vistaHist === "area"){
+    const d = pkDatosPorArea();
+    if(!d.lista.length){ selArea.innerHTML = ""; cont.innerHTML = `<div class="feed-empty">Todavía no hay funciones asignadas en estos días${(pk.sup || pk.turno || filtros.zona) ? " para el filtro actual" : ""}.</div>`; return; }
+    if(pk.areaHist && !d.lista.some(a => a.key === pk.areaHist)) pk.areaHist = "";
+    selArea.innerHTML = `<option value="">Todas las áreas</option>` + d.lista.map(a => `<option value="${escHtml(a.key)}" ${pk.areaHist === a.key ? "selected" : ""}>${escHtml(a.label)}</option>`).join("");
+    const ver = pk.areaHist ? d.lista.filter(a => a.key === pk.areaHist) : d.lista;
+    // Primero un cuadro comparativo (personas con función por área y día) y debajo el detalle de funciones de cada área.
+    const resumen = !pk.areaHist && d.lista.length > 1 ? `<table class="pk-hd-tabla sticky" style="margin-bottom:22px;"><thead><tr><th>Área</th><th class="num">Equipo hoy</th>
+        ${d.fechas.map(f => `<th class="${hoyCol(f)}" title="${escHtml(fmtDiaLargo(f))}">${escHtml(fmtDiaCorto(f))}</th>`).join("")}<th class="num sep">Total</th></tr></thead>
+        <tbody>${d.lista.map(a => `<tr data-area="${escHtml(a.key)}" style="cursor:pointer;"><td style="font-weight:700;">${escHtml(a.label)}</td><td class="num">${a.equipo || "—"}</td>
+          ${d.fechas.map(f => { const x = a.porFecha[f]; return `<td class="pk-cel ${hoyCol(f)}" title="${escHtml(a.label)} · ${escHtml(fmtDiaLargo(f))}">${x ? `<b>${x.total}</b>` : `<span class="hora-pendiente">·</span>`}</td>`; }).join("")}
+          <td class="num sep" style="font-weight:800;">${a.total}</td></tr>`).join("")}</tbody></table>` : "";
+    const bloque = (a) => `<h4 style="margin:${resumen || ver[0] !== a ? "18px" : "4px"} 0 8px;font-size:13.5px;">${escHtml(a.label)} <small style="font-weight:500;color:var(--muted);">· equipo hoy: ${a.equipo || "—"} · ${a.total} asignaciones en el período</small></h4>
+      <table class="pk-hd-tabla"><thead><tr><th>Día</th>${d.funcs.map(n => `<th class="num" style="color:${colorFunc(n)};">${escHtml(n)}</th>`).join("")}<th class="num">Total</th>
+        ${d.turnoKeys.map((k, i) => `<th class="num${i === 0 ? " sep" : ""}">${escHtml(d.turnoLabel(k))}</th>`).join("")}</tr></thead>
+        <tbody>${[...d.fechas].reverse().map(f => { const x = a.porFecha[f];
+          return `<tr class="${f === pk.fecha ? "on " : ""}${x ? "" : "vacio"}"><td style="font-weight:700;">${escHtml(fmtDiaLargo(f))}</td>
+            ${d.funcs.map(n => `<td class="num">${x && x.por[n] ? x.por[n] : `<span class="hora-pendiente">·</span>`}</td>`).join("")}
+            <td class="num" style="font-weight:800;">${x ? x.total : `<span class="hora-pendiente">—</span>`}</td>
+            ${d.turnoKeys.map((k, i) => `<td class="num${i === 0 ? " sep" : ""}">${x && x.turnos[k] ? x.turnos[k] : `<span class="hora-pendiente">·</span>`}</td>`).join("")}</tr>`; }).join("")}</tbody></table>`;
+    cont.innerHTML = resumen + ver.map(bloque).join("");
+    // Tocar un área del cuadro comparativo abre solo esa área.
+    cont.querySelectorAll("tr[data-area]").forEach(tr => tr.addEventListener("click", () => { pk.areaHist = tr.dataset.area; pintarHistDias(); }));
     return;
   }
 
@@ -2903,7 +2960,19 @@ function exportarHistorialPicking(){
     fila["Días con función"] = g.dias;
     return fila;
   })), "Por supervisor");
-  // 3) Detalle por persona (la función de cada día)
+  // 3) Por área: una fila por área y día con las funciones de ese día
+  const ar = pkDatosPorArea();
+  const filasArea = [];
+  ar.lista.forEach(a => [...ar.fechas].reverse().forEach(f => {
+    const x = a.porFecha[f]; if(!x) return;
+    const fila = { Área: a.label, Fecha: f, Día: fmtDiaLargo(f) };
+    ar.funcs.forEach(n => { fila[n] = x.por[n] || 0; });
+    fila.Total = x.total;
+    ar.turnoKeys.forEach(k => { fila["Turno " + ar.turnoLabel(k)] = x.turnos[k] || 0; });
+    filasArea.push(fila);
+  }));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasArea.length ? filasArea : [{ Área: "Sin datos" }]), "Por área");
+  // 4) Detalle por persona (la función de cada día)
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(per.lista.map(p => {
     const fila = { DNI: p.dni, Colaborador: p.nombre, Turno: tituloTurno(p.turno), Supervisor: p.supervisor || "", Área: p.area || "" };
     per.fechas.forEach(f => { fila[f] = p.dias[f] || ""; });
@@ -2958,10 +3027,14 @@ async function copiarPickingAnterior(){
 
 /* ---- Excel de Picking por rango de fechas ---- */
 const PKX_MAX_DIAS = 62;
-function abrirExportPicking(){
+function abrirExportPicking(opts){
   const d = pk.fecha || todayISO();
-  document.getElementById("pkx-desde").value = d;
+  const porArea = !!(opts && opts.tipo === "area");
+  // Desde la vista «Por área» del historial se abre ya preparado: el período que se ve en pantalla y solo el histórico por área.
+  document.getElementById("pkx-desde").value = porArea ? pkFechasHist()[0] : d;
   document.getElementById("pkx-hasta").value = d;
+  document.getElementById("pkx-area").checked = porArea;
+  document.getElementById("pkx-det").checked = !porArea;
   const est = document.getElementById("pkx-estado"); est.textContent = ""; est.className = "pm-status";
   document.getElementById("pkx-descargar").disabled = false;
   document.getElementById("pk-export-modal").classList.add("show");
@@ -2996,6 +3069,8 @@ async function descargarPickingRango(){
   const dias = []; for(let d = desde; d <= hasta; d = addDays(d, 1)) dias.push(d);
   if(dias.length > PKX_MAX_DIAS){ pon(`El rango es de ${dias.length} días; el máximo es ${PKX_MAX_DIAS}. Descárgalo en partes.`, true); return; }
   const respetar = document.getElementById("pkx-filtros").checked, conSin = document.getElementById("pkx-sin").checked, conVacios = document.getElementById("pkx-vacios").checked;
+  const quiereDet = document.getElementById("pkx-det").checked, quiereArea = document.getElementById("pkx-area").checked;
+  if(!quiereDet && !quiereArea){ pon("Elige qué descargar: el histórico por área, el detalle por persona, o ambos.", true); return; }
   btn.disabled = true;
   try{
     // Cada día se pide con la misma consulta que usa la pantalla (trae lo de ESE día: supervisor, turno, función, ingreso), en tandas de 4.
@@ -3011,12 +3086,21 @@ async function descargarPickingRango(){
     await Promise.all([trabajador(), trabajador(), trabajador(), trabajador()]);
 
     const filas = [], resumen = [], nombresFunc = new Set(); let omitidos = 0;
+    const areas = new Map();   // histórico por área: clave -> { label, dias: { fecha: { equipo, por, turnos, sin } } }
+    const claveArea = (p) => (p.area ? claveAreaSup(p.area) : "") || "__SINAREA__";
+    const etiquetaArea = (p) => { const z = zonaDeArea(p.area); return z ? zonaDef(z).label : (String(p.area || "").trim() || "(Sin área)"); };
     dias.forEach(d => {
       const crudo = porDia.get(d) || [];
       const lista = pkxFiltrar(crudo, respetar).slice().sort((a, b) => cmpNombre(a.nombre, b.nombre));
       // Un día sin una sola función ni ingreso (en todo el personal de Picking) es un día sin registro, no un día "sin asignar".
       const actividad = crudo.some(p => pkEnAlcance(p.dni, p.area) && (p.funcion || p.ingreso));
       if(!actividad && !conVacios){ omitidos++; return; }
+      lista.forEach(p => {
+        const a = areas.get(claveArea(p)) || (areas.set(claveArea(p), { label: etiquetaArea(p), dias: {} }), areas.get(claveArea(p)));
+        const x = a.dias[d] || (a.dias[d] = { equipo: 0, por: {}, turnos: {}, sin: 0 });
+        x.equipo++;
+        if(p.funcion){ x.por[p.funcion] = (x.por[p.funcion] || 0) + 1; const t = normNombre(p.turno) || SIN_TURNO; x.turnos[t] = (x.turnos[t] || 0) + 1; } else x.sin++;
+      });
       const cuenta = {}; lista.forEach(p => { const k = p.funcion || "(sin asignar)"; cuenta[k] = (cuenta[k] || 0) + 1; if(p.funcion) nombresFunc.add(p.funcion); });
       resumen.push({ d, total: lista.length, cuenta, vac: lista.filter(p => p.funcion && normArea(p.funcion) === "VACACIONES").length, falta: lista.filter(p => p.funcion && normArea(p.funcion) === "FALTA").length });
       (conSin ? lista : lista.filter(p => p.funcion)).forEach(p => filas.push({
@@ -3025,20 +3109,47 @@ async function descargarPickingRango(){
         Ingreso: p.ingreso ? fmtHora(p.ingreso) : "", "Asignado por": p.asignado_por || "",
       }));
     });
-    if(!filas.length){ pon(omitidos ? `No hay registros en ese rango (${omitidos} ${omitidos === 1 ? "día sin actividad" : "días sin actividad"}). Marca «Incluir los días sin actividad» si los necesitas.` : "No hay filas con esas condiciones.", true); return; }
+    if((quiereDet ? !filas.length : !areas.size)){ pon(omitidos ? `No hay registros en ese rango (${omitidos} ${omitidos === 1 ? "día sin actividad" : "días sin actividad"}). Marca «Incluir los días sin actividad» si los necesitas.` : "No hay filas con esas condiciones.", true); return; }
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), "Picking");
-    // Resumen: una fila por día con cuántos tuvo cada función.
     const orden = [...funcionesCat.map(f => f.nombre).filter(n => nombresFunc.has(n)), ...[...nombresFunc].filter(n => !funcionesCat.some(f => f.nombre === n))];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumen.map(r => {
-      const o = { Fecha: r.d, Colaboradores: r.total };
-      orden.forEach(n => { o[n] = r.cuenta[n] || 0; });
-      o["(sin asignar)"] = r.cuenta["(sin asignar)"] || 0;
-      return o;
-    })), "Resumen por día");
-    XLSX.writeFile(wb, desde === hasta ? `picking_${desde}.xlsx` : `picking_${desde}_a_${hasta}.xlsx`);
-    toast(`Excel descargado: ${filas.length} filas de ${resumen.length} ${resumen.length === 1 ? "día" : "días"}${omitidos ? ` (${omitidos} sin actividad no se incluyeron)` : ""}`);
+    const diasConDatos = resumen.map(r => r.d);
+    if(quiereArea){
+      // Histórico por área: una fila por área y día (equipo del día, cuántas personas por función, sin asignar y por turno).
+      const turnosOrden = ["MANANA", "TARDE", "NOCHE"];
+      const sumaEquipo = (a) => Object.values(a.dias).reduce((n, x) => n + x.equipo, 0);
+      const listaAreas = [...areas.values()].sort((a, b) => sumaEquipo(b) - sumaEquipo(a) || a.label.localeCompare(b.label, "es"));
+      const largo = [];
+      listaAreas.forEach(a => [...diasConDatos].reverse().forEach(d => {
+        const x = a.dias[d]; if(!x) return;
+        const conF = Object.values(x.por).reduce((n, v) => n + v, 0);
+        const fila = { Fecha: d, Día: fmtDiaLargo(d), Área: a.label, "Equipo del día": x.equipo };
+        orden.forEach(n => { fila[n] = x.por[n] || 0; });
+        fila["Con función"] = conF; fila["Sin asignar"] = x.sin; fila["% con función"] = x.equipo ? Math.round(conF / x.equipo * 100) / 100 : 0;
+        turnosOrden.forEach(t => { fila["Turno " + (t === "MANANA" ? "Mañana" : tituloTurno(t))] = x.turnos[t] || 0; });
+        largo.push(fila);
+      }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(largo), "Por área y día");
+      // Matriz: personas con función por área (filas) y día (columnas), con el total.
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(listaAreas.map(a => {
+        const fila = { Área: a.label }; let tot = 0;
+        diasConDatos.forEach(d => { const x = a.dias[d]; const n = x ? Object.values(x.por).reduce((m, v) => m + v, 0) : 0; fila[d] = n; tot += n; });
+        fila["Total del período"] = tot; return fila;
+      })), "Matriz área x día");
+    }
+    if(quiereDet){
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), "Picking");
+      // Resumen: una fila por día con cuántos tuvo cada función.
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumen.map(r => {
+        const o = { Fecha: r.d, Colaboradores: r.total };
+        orden.forEach(n => { o[n] = r.cuenta[n] || 0; });
+        o["(sin asignar)"] = r.cuenta["(sin asignar)"] || 0;
+        return o;
+      })), "Resumen por día");
+    }
+    const base = quiereArea && !quiereDet ? "picking_historico_por_area" : "picking";
+    XLSX.writeFile(wb, desde === hasta ? `${base}_${desde}.xlsx` : `${base}_${desde}_a_${hasta}.xlsx`);
+    toast(`Excel descargado: ${quiereArea ? `${areas.size} ${areas.size === 1 ? "área" : "áreas"}` : ""}${quiereArea && quiereDet ? " y " : ""}${quiereDet ? `${filas.length} filas` : ""} en ${resumen.length} ${resumen.length === 1 ? "día" : "días"}${omitidos ? ` (${omitidos} sin actividad no se incluyeron)` : ""}`);
     cerrarExportPicking();
   }catch(e){
     pon("No se pudo descargar: " + humanError(e), true);
