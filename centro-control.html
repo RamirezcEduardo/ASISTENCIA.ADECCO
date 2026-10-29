@@ -2821,7 +2821,14 @@ function pkDatosPorArea(){
   pkPorSupervisor(pk.filas.filter(p => pasaFiltroZona(p.dni) && (!pk.turno || turnoIgual(p.turno, pk.turno))))
     .forEach(p => { const k = p.area ? claveAreaSup(p.area) : "__SINAREA__"; if(areas.has(k)) areas.get(k).equipo++; });
   const lista = [...areas.values()].sort((a, b) => b.total - a.total || a.label.localeCompare(b.label, "es"));
-  return { filas, funcs, fechas, turnoKeys, turnoLabel: (k) => pkEtiquetaTurnoFila(k, filas), lista };
+  // Consolidado: todas las áreas juntas, día por día.
+  const consolidado = {};
+  filas.forEach(r => {
+    const d = consolidado[r.fecha] || (consolidado[r.fecha] = { total: 0, por: {}, turnos: {} });
+    d.total++; d.por[r.funcion] = (d.por[r.funcion] || 0) + 1;
+    const t = pkClaveTurnoFila(r); d.turnos[t] = (d.turnos[t] || 0) + 1;
+  });
+  return { filas, funcs, fechas, turnoKeys, turnoLabel: (k) => pkEtiquetaTurnoFila(k, filas), lista, consolidado };
 }
 // Detalle por persona: la función de cada colaborador en cada día.
 function pkDatosPorPersona(){
@@ -2899,12 +2906,12 @@ function pintarHistDias(){
     selArea.innerHTML = `<option value="">Todas las áreas</option>` + d.lista.map(a => `<option value="${escHtml(a.key)}" ${pk.areaHist === a.key ? "selected" : ""}>${escHtml(a.label)}</option>`).join("");
     const ver = pk.areaHist ? d.lista.filter(a => a.key === pk.areaHist) : d.lista;
     // Primero un cuadro comparativo (personas con función por área y día) y debajo el detalle de funciones de cada área.
-    const resumen = !pk.areaHist && d.lista.length > 1 ? `<table class="pk-hd-tabla sticky" style="margin-bottom:22px;"><thead><tr><th>Área</th><th class="num">Equipo hoy</th>
+    const resumen = !pk.areaHist && d.lista.length > 1 ? `<h4 style="margin:0 0 8px;font-size:13.5px;">Personas con función por área y día <small style="font-weight:500;color:var(--muted);">· toca un área para abrirla</small></h4><table class="pk-hd-tabla sticky" style="margin-bottom:4px;"><thead><tr><th>Área</th><th class="num">Equipo hoy</th>
         ${d.fechas.map(f => `<th class="${hoyCol(f)}" title="${escHtml(fmtDiaLargo(f))}">${escHtml(fmtDiaCorto(f))}</th>`).join("")}<th class="num sep">Total</th></tr></thead>
         <tbody>${d.lista.map(a => `<tr data-area="${escHtml(a.key)}" style="cursor:pointer;"><td style="font-weight:700;">${escHtml(a.label)}</td><td class="num">${a.equipo || "—"}</td>
           ${d.fechas.map(f => { const x = a.porFecha[f]; return `<td class="pk-cel ${hoyCol(f)}" title="${escHtml(a.label)} · ${escHtml(fmtDiaLargo(f))}">${x ? `<b>${x.total}</b>` : `<span class="hora-pendiente">·</span>`}</td>`; }).join("")}
           <td class="num sep" style="font-weight:800;">${a.total}</td></tr>`).join("")}</tbody></table>` : "";
-    const bloque = (a) => `<h4 style="margin:${resumen || ver[0] !== a ? "18px" : "4px"} 0 8px;font-size:13.5px;">${escHtml(a.label)} <small style="font-weight:500;color:var(--muted);">· equipo hoy: ${a.equipo || "—"} · ${a.total} asignaciones en el período</small></h4>
+    const bloque = (a, primero) => `<h4 style="margin:${primero ? "4px" : "18px"} 0 8px;font-size:13.5px;">${escHtml(a.label)} <small style="font-weight:500;color:var(--muted);">· ${a.consolidado ? "todas las áreas · " : ""}equipo hoy: ${a.equipo || "—"} · ${a.total} asignaciones en el período</small></h4>
       <table class="pk-hd-tabla"><thead><tr><th>Día</th>${d.funcs.map(n => `<th class="num" style="color:${colorFunc(n)};">${escHtml(n)}</th>`).join("")}<th class="num">Total</th>
         ${d.turnoKeys.map((k, i) => `<th class="num${i === 0 ? " sep" : ""}">${escHtml(d.turnoLabel(k))}</th>`).join("")}</tr></thead>
         <tbody>${[...d.fechas].reverse().map(f => { const x = a.porFecha[f];
@@ -2912,7 +2919,9 @@ function pintarHistDias(){
             ${d.funcs.map(n => `<td class="num">${x && x.por[n] ? x.por[n] : `<span class="hora-pendiente">·</span>`}</td>`).join("")}
             <td class="num" style="font-weight:800;">${x ? x.total : `<span class="hora-pendiente">—</span>`}</td>
             ${d.turnoKeys.map((k, i) => `<td class="num${i === 0 ? " sep" : ""}">${x && x.turnos[k] ? x.turnos[k] : `<span class="hora-pendiente">·</span>`}</td>`).join("")}</tr>`; }).join("")}</tbody></table>`;
-    cont.innerHTML = resumen + ver.map(bloque).join("");
+    // Consolidado total del día (todas las áreas juntas): solo en la vista de todas las áreas y cuando hay más de una.
+    const consol = !pk.areaHist && d.lista.length > 1 ? { label: "Consolidado total del día", consolidado: true, equipo: d.lista.reduce((n, a) => n + a.equipo, 0), total: d.lista.reduce((n, a) => n + a.total, 0), porFecha: d.consolidado } : null;
+    cont.innerHTML = (consol ? bloque(consol, true) : "") + (resumen ? `<div style="height:${consol ? 22 : 0}px;"></div>` + resumen : "") + ver.map((a, i) => bloque(a, i === 0 && !consol && !resumen)).join("");
     // Tocar un área del cuadro comparativo abre solo esa área.
     cont.querySelectorAll("tr[data-area]").forEach(tr => tr.addEventListener("click", () => { pk.areaHist = tr.dataset.area; pintarHistDias(); }));
     return;
@@ -3119,6 +3128,19 @@ async function descargarPickingRango(){
       const turnosOrden = ["MANANA", "TARDE", "NOCHE"];
       const sumaEquipo = (a) => Object.values(a.dias).reduce((n, x) => n + x.equipo, 0);
       const listaAreas = [...areas.values()].sort((a, b) => sumaEquipo(b) - sumaEquipo(a) || a.label.localeCompare(b.label, "es"));
+      // Consolidado total del día: todas las áreas juntas.
+      const consolFilas = [...diasConDatos].reverse().map(d => {
+        const c = { equipo: 0, sin: 0, por: {}, turnos: {} };
+        listaAreas.forEach(a => { const x = a.dias[d]; if(!x) return; c.equipo += x.equipo; c.sin += x.sin;
+          Object.entries(x.por).forEach(([k, v]) => { c.por[k] = (c.por[k] || 0) + v; }); Object.entries(x.turnos).forEach(([k, v]) => { c.turnos[k] = (c.turnos[k] || 0) + v; }); });
+        const conF = Object.values(c.por).reduce((n, v) => n + v, 0);
+        const fila = { Fecha: d, Día: fmtDiaLargo(d), "Equipo del día": c.equipo };
+        orden.forEach(n => { fila[n] = c.por[n] || 0; });
+        fila["Con función"] = conF; fila["Sin asignar"] = c.sin; fila["% con función"] = c.equipo ? Math.round(conF / c.equipo * 100) / 100 : 0;
+        turnosOrden.forEach(t => { fila["Turno " + (t === "MANANA" ? "Mañana" : tituloTurno(t))] = c.turnos[t] || 0; });
+        return fila;
+      });
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(consolFilas), "Consolidado por día");
       const largo = [];
       listaAreas.forEach(a => [...diasConDatos].reverse().forEach(d => {
         const x = a.dias[d]; if(!x) return;
